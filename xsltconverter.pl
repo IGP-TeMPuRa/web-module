@@ -5,7 +5,12 @@
     # <xsl:copy>
       # <xsl:copy-of select="record_id"/>
       # <xsl:copy-of select="bin_uri"/>     
-	  # <xsl:copy-of select="taxonomy/species/taxon/name"/>
+      # <xsl:copy-of select="taxonomy/species/taxon/name"/>
+      # <xsl:copy-of select="taxonomy/phylum/taxon/name"/>
+      # <xsl:copy-of select="taxonomy/class/taxon/name"/>
+      # <xsl:copy-of select="taxonomy/family/taxon/name"/>
+      # <xsl:copy-of select="taxonomy/subfamily/taxon/name"/>
+      # <xsl:copy-of select="taxonomy/genus/taxon/name"/>
       # <xsl:copy-of select="collection_event/coordinates/lat"/>
       # <xsl:copy-of select="collection_event/coordinates/lon"/>
       # <xsl:copy-of select="sequences/sequence/nucleotides"/>
@@ -15,7 +20,6 @@
   #must use CPAN to install these packages
   #perl -MCPAN -e "install ..."
   
-  use XML::Simple;
   use XML::LibXSLT;
   use XML::LibXML;
 
@@ -34,6 +38,6 @@
 
   #to export to XML for use in R, will output to directory perl script is located in
 	
-  open XML, ">BOLD.xml";
+  open XML, ">revisedBOLD.xml";
   print XML $stylesheet->output_string($results);
   close XML;
