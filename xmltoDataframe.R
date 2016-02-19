@@ -8,6 +8,7 @@ install.packages("ape")
 library(ape)
 
 #An intial note: we want to eventually make import into R really easy by having R call the perl script directly
+testimport <- system("perl C:\\Users\\Winfield\\Desktop\\BOLD_database_xml\\xsltconverter.pl")
 
 #Original xml taken from the BOLD API based on your chosen phylum and geographical region
 #xml file converted to a simplified xml with reduced number of nodes using the xmlconvertor.pl and transformxml.xsl scripts
@@ -21,7 +22,7 @@ library(ape)
 
 
 #Make sure you have the right path to the revised xml file, this path will change depending on the user!
-xml <- xmlParse("C:/Users/MattL/Desktop/IGP/reptilia.xml")
+xml <- xmlParse("C:/Users/Winfield/Desktop/BOLD_database_xml/revisedBOLD.xml")
 
 #Should automatically make a dataframe with the columns that we want
 dfInitial <-xmlToDataFrame(getNodeSet(xml, "//record"))

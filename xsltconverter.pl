@@ -28,16 +28,16 @@
 
   #xml file, perl file and xsl script must all be in the same directory
   #insert whichever xml you want and perl will parse it
-  my $source = $parser->parse_file('bold_data.xml');
+  my $source = $parser->parse_file('C:\Users\Winfield\Desktop\BOLD_database_xml\bold_data.xml');
   
   #xsl script that simplifies the xml file
-  my $style_doc = $parser->parse_file('transformxml.xsl');
+  my $style_doc = $parser->parse_file('C:\Users\Winfield\Desktop\BOLD_database_xml\transformxml.xsl');
   my $stylesheet = $xslt->parse_stylesheet($style_doc);
 
   my $results = $stylesheet->transform($source);
 
   #to export to XML for use in R, will output to directory perl script is located in
 	
-  open XML, ">revisedBOLD.xml";
+  open XML, ">revisedBOLD2.xml";
   print XML $stylesheet->output_string($results);
   close XML;
