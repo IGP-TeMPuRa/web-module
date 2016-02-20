@@ -6,6 +6,10 @@ library(foreach)
 #For genetic distance, we use the ape package
 install.packages("ape")
 library(ape)
+#Decided to use the data.tables package for one component of the code
+install.packages("data.table")
+library(data.table)
+
 
 #An intial note: we want to eventually make import into R really easy by having R call the perl script directly
 testimport <- system("perl C:\\Users\\Winfield\\Desktop\\BOLD_database_xml\\xsltconverter.pl")
@@ -223,18 +227,33 @@ dfBestOutGroup <- dfBestOutGroup[dfBestOutGroup$values %in% dfClosestOutGroup$cl
 #Its possible to have more than one ideal outgrouping per pairing, so restricting to one outgrouping per pairing
 dfBestOutGroup <- by(dfBestOutGroup, dfBestOutGroup["ind"], head, n=1)
 dfBestOutGroup <- Reduce(rbind, dfBestOutGroup)
+dfBestOutGroup<- dfBestOutGroup[order(dfBestOutGroup$rownum),] 
+
+#More Dataframe/table manipulation
 
 #We also need the identity of our outgroupings, this will give numerical identity in order to reference dfrandombinseq to get outgrouping species data
 j=0:(nrow(dfBestOutGroup)-1)
 dfBestOutGroup$identity <- (dfBestOutGroup$rownum / (nrow(dfRandomBinSeq))-j) * (nrow(dfRandomBinSeq))
 #Also ordering dfBestOutGroup by identity
 dfBestOutGroup<- dfBestOutGroup[order(dfBestOutGroup$identity),] 
+colnames(dfRandomBinSeq)[17] <- "identity"
+#Converting to data table format and setting keys in order to properly merge
+dfRandomBinSeq <- data.table(dfRandomBinSeq)
+dfBestOutGroup <- data.table(dfBestOutGroup)
+setkey(dfBestOutGroup,identity)
+#convert identity key of dfRandomBinSeq to numeric
+identityNum <- with(dfRandomBinSeq, as.numeric(as.character(identity))) 
+dfRandomBinSeq$identityNum <- identityNum
+#Reorder dfRandomBinSeq and setting key for identityNum
+dfRandomBinSeq<- dfRandomBinSeq[order(dfRandomBinSeq$identityNum),] 
+setkey(dfRandomBinSeq,identityNum)
 
 #Can now merge randombinseq to bestoutgroup giving us the data we need
-dfBestOutGroup <- merge.data.frame(dfBestOutGroup, dfRandomBinSeq, by.x ="identity", by.y ="ind") 
+dfBestOutGroup <- merge(dfBestOutGroup, dfRandomBinSeq, by.x = "identity", by.y = "identityNum", all.x = TRUE) 
+dfBestOutGroup <- as.data.frame(dfBestOutGroup)
 
 #Can rename certain columns to more closely resemble dfMatchOverall 
-dfBestOutGroup <- (dfBestOutGroup[,c("bin_uri","record_id","values","medianLat","latMin","latMax","binSize","phylum","class","order","family","subfamily","genus","species","nucleotides","sLengths","medianLon","ind")])
+dfBestOutGroup <- dfBestOutGroup[,c("bin_uri","record_id","values","medianLat","latMin","latMax","binSize","phylum","class","order","family","subfamily","genus","species","nucleotides","sLengths","medianLon","identity")]
 colnames(dfBestOutGroup)[3] <- "outGroupDist"
 colnames(dfBestOutGroup)[4] <- "binMedianLat"
 colnames(dfBestOutGroup)[5] <- "binLatMin"
@@ -262,6 +281,12 @@ dfBestOutGroup <- (dfBestOutGroup[,c("associatedInGroup","bin_uri","record_id","
 #Note that each outgroup will be duplicated for each member of the pairing
 #.x beside headings are the ingroup data (except unique columns), scroll far enough to the right and headings with .y are the outgroup related columns
 dfMatchOverallBest <- merge(dfMatchOverallBest, dfBestOutGroup, by.x = "inGroupPairing", by.y = "associatedInGroup")
+
+#Note there will be a few pairings that dont have a suitable outgroup(couldnt find a bin with the suitable outgroup distance) so we can filter those out
+colnames(dfMatchOverallBest)[21] <- "bin_uriOutGroup"
+binFilter2<-which(is.na(dfMatchOverallBest$bin_uriOutGroup))
+if(length(binFilter2) >0){
+dfMatchOverallBest<-dfMatchOverallBest[-binFilter2,]}
 
 #Now we have both outgroups and suitable pairings!
 
