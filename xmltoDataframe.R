@@ -269,9 +269,9 @@ colnames(dfBestOutGroup)[15] <- "sequenceCOI"
 colnames(dfBestOutGroup)[18] <- "indexNo"
 
 #Now just need to associate our outgroup with the pairings by adding another column to the outgroup df 
-#Just ordering by index for both BestOutGroup and MatchOverall1
-dfBestOutGroup<- dfBestOutGroup[order(dfBestOutGroup$indexNo),] 
-dfMatchOverall1<- dfMatchOverall1[order(dfMatchOverall1$indexNo),] 
+#Just ordering values by order of values in ClosestOutGroup to ensure we have the correct order
+dfBestOutGroup <- dfBestOutGroup[order(match(dfBestOutGroup[,3],dfClosestOutGroup[,1])),]
+
 #Appending the ingrouppairing column to the Outgroup dataframe so we know which pairing its associated with
 dfBestOutGroup$associatedInGroup <- dfMatchOverall1$inGroupPairing
 #One more reorganization
