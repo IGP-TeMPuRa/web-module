@@ -27,7 +27,6 @@ system("perl C:\\Users\\Winfield\\Desktop\\BOLD_database_xml\\xsltconverter.pl")
 xmlParseDoc <- file.choose()
 xml <- xmlParse(xmlParseDoc)
 
-
 #Make sure you have the right path to the revised xml file, this path will change depending on the user!
 #xml <- xmlParse("C:/Users/Winfield/Documents/revisedBOLD2.xml")
 
