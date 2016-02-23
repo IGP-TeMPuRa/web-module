@@ -8,7 +8,7 @@ install.packages("ape")
 library(ape)
 
 #An intial note: we want to eventually make import into R really easy by having R call the perl script directly
-testimport <- system("perl C:\\Users\\Winfield\\Desktop\\BOLD_database_xml\\xsltconverter.pl")
+system("perl C:\\Users\\Winfield\\Desktop\\BOLD_database_xml\\xsltconverter.pl")
 
 #Original xml taken from the BOLD API based on your chosen phylum and geographical region
 #xml file converted to a simplified xml with reduced number of nodes using the xmlconvertor.pl and transformxml.xsl scripts
@@ -20,9 +20,12 @@ testimport <- system("perl C:\\Users\\Winfield\\Desktop\\BOLD_database_xml\\xslt
 #The command to view the full dataframe or matrix is, insert df or matrix in brackets:
 #utils::View()
 
+#Instead of pointing to the file to parse which can be tedious to constantly change the absolute path. Allows the user to pick a file and then store in a variable.
+xmlParseDoc <- file.choose()
+xml <- xmlParse(xmlParseDoc)
 
 #Make sure you have the right path to the revised xml file, this path will change depending on the user!
-xml <- xmlParse("C:/Users/Winfield/Desktop/BOLD_database_xml/revisedBOLD.xml")
+#xml <- xmlParse("C:/Users/Winfield/Documents/revisedBOLD2.xml")
 
 #Should automatically make a dataframe with the columns that we want
 dfInitial <-xmlToDataFrame(getNodeSet(xml, "//record"))
