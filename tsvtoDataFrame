@@ -9,7 +9,7 @@
 ##################
 #A few important tips:
 
-#Larger taxa, ex: aves take a few mins to process the tsv initially
+#Larger taxa, ex: aves take a several mins to process the tsv initially and can potentially consume a lot of working memory. I wouldnt run any taxa that is very large, (insecta for example) until we know what kind of memory resources it will consume.
 #Ive found taxon=reptilia, geo=all to be really great for testing, it usually generates between 5 and 15 pairings and processing times are short
 
 #Some tips for using the BOLD API since this is what is used to grab the relevant data we need: 
@@ -18,12 +18,14 @@
 #geo=all in the url means global but geo can be geo=Canada for example
 #Can use | modifier in the url, for example &geo=Canada|Alaska would give data for both Canada and alaska, or taxon=Aves|Reptilia would yield give data for both Aves and Reptilia
 
-#We recommend using RStudio: https://www.rstudio.com/home/, provides a nicer interface than just using R, also this program has only been tested in RStudio
+#We recommend using RStudio: https://www.rstudio.com/home/, provides a nicer interface than just using R
 #Large matrices and dataframes may not show all columns, you can overcome this by typing the command: utils::View() where you would insert the dataframe or matrix you want in the brackets of that command
 #Pay attention to the seed you are using for the generation of randomly sampled bin members, keeping the seed the same will produce the same result each time, if you want random bin members generated each time however you can comment the seed out
 
 #Important dataframes:
 #dfMatchOverallBest is the finalized dataframe that contains all of the finalized pairings and outgroupings
+#dfMatchOverall is the dataframe of ingroup pairings before bins with multiple pairings are eliminated based on distance
+#dfMatchOverall1 is sort of an intermediate df between MatchOverall and MatchOverallBest that shows which pairing was chosen for each bin
 #dfInitial is the dataframe first produced by the import from BOLD and is trimmed by lat, bin_uri etc.
 #dfLatLon just contains relevant information for each bin: bin size, maximum lat, median lat, minimum lat, median lon
 #dfBestOutGroup contains the associated outgroupings only but does have a column for which pairing its associated with
@@ -92,9 +94,11 @@ if(length(seqFilter) >0){
 
 #We first have to determine a median latitude for each bin so this will involve subdividing the dataframe into smaller dataframes by BIN
 
+#First we can make a smaller dataframe with the columns we want for each bin - bin_uri, latnum, lonnum, record_id, if we didnt do this, the binList would consume a huge amount of memory
+dfBinList <- (dfInitial[,c("record_id","bin_uri","latNum","lonNum")])
 #Create groupings by bin with each grouping representing a different bin_uri
 #Each element of this list represents a bin with subelements representing the various columns of the initial dataframe created and the information is grouped by bin 
-binList <- lapply(unique(dfInitial$bin_uri), function(x) dfInitial[dfInitial$bin_uri == x,])
+binList <- lapply(unique(dfBinList$bin_uri), function(x) dfBinList[dfBinList$bin_uri == x,])
 
 #Now to determine a median latitude for each bin
 medianLat <- sapply( binList , function(x) median( x$latNum ) )
@@ -118,19 +122,12 @@ dfLatLon$latMax <- c(latMax)
 dfLatLon$binSize <- c(binSize)
 
 #We also will randomly select sequences from each bin of dfInitial with all of its sequence and taxonomic data, this is because for larger taxa, it may become too computionally intensive to run all sequences of each bin
-#Foreach will iterate through each bin and sample one or a few of its members from the initial dataframe, some of the smaller bins with a small number of members may not necessarily be represented depending on RNG (random number generation) but if run enough times should represent all BINs in the chosen taxa
-#Had set a seed for testing - meaning it will produce the same result each time, if you want random each time, comment seed out
-#set.seed(15);
-randomBinSeqList <- foreach(i=1:nrow(dfLatLon)) %do% dfInitial[ sample( which( dfInitial$bin_uri == dfLatLon$bin_uri[i] ) , 1, replace = FALSE ) , ]
-
-#Turn this list of randomly sampled record ids and put into a dataframe
-dfRandomBinSeq <- do.call("rbind", lapply(randomBinSeqList, as.data.frame)) 
-
-#Eliminates redundant bins in case there are any, now we have a usable dataframe for the distance calculation with each row being a distinct, randomly generated bin member
-dfRandomBinSeq <- dfRandomBinSeq[!duplicated(dfRandomBinSeq$bin_uri),]
-
-#Can reference to our median Latitude dataframe and determine which ones are shared since some bins might not necessarily be represented due to the sample function used earlier
-dfLatLon <- subset(dfLatLon, dfLatLon$bin_uri %in% dfRandomBinSeq$bin_uri)
+#sapply will iterate through each bin and sample one of its members from the initial dataframe randomly
+#Had set a seed for testing - meaning it will produce the same result each time, if you want a random result each time, comment seed out
+set.seed(15);
+record_id <- sapply( binList , function(x) sample( x$record_id, 1, replace = FALSE ) )
+dfRandomBinSeq <- data.frame(record_id)
+dfRandomBinSeq <- merge(dfRandomBinSeq, dfInitial, by.x = "record_id", by.y = "record_id")
 
 #Can now merge dfLatLon with RandomBinseq (but retain the name RandomBinSeq) to create one dataframe containg all pertinent data we need and can reference back to from the match overall dataframe produced later on
 dfRandomBinSeq <- merge(dfRandomBinSeq, dfLatLon, by.x = "bin_uri")
@@ -283,11 +280,11 @@ dfBestOutGroup$associatedInGroup <- dfMatchOverall1$inGroupPairing
 #.x beside headings are the ingroup data (except unique columns), scroll far enough to the right and headings with .y are the outgroup related columns
 dfMatchOverallBest <- merge(dfMatchOverallBest, dfBestOutGroup, by.x = "inGroupPairing", by.y = "associatedInGroup")
 
-#Note there will be a few pairings that dont have a suitable outgroup(couldnt find a bin with the suitable outgroup distance) so we can filter those out
-colnames(dfMatchOverallBest)[21] <- "bin_uriOutGroup"
-binFilter2<-which(is.na(dfMatchOverallBest$bin_uriOutGroup))
-if(length(binFilter2) >0){
-  dfMatchOverallBest<-dfMatchOverallBest[-binFilter2,]}
+#Note there sometimes will be a few pairings that dont have a suitable outgroup(couldnt find a bin with the suitable outgroup distance) so we can filter those out
+colnames(dfMatchOverallBest)[28] <- "bin_uriOutGroup"
+noOutGroupFilter<-which(is.na(dfMatchOverallBest$bin_uriOutGroup))
+if(length(noOutGroupFilter) >0){
+  dfMatchOverallBest<-dfMatchOverallBest[-noOutGroupFilter,]}
 
 #Now we have both outgroups and suitable pairings!
 
@@ -305,4 +302,3 @@ filename <- readline(prompt="")
 
 #TSV
 #write.table(dfMatchOverallBest, file=paste(filename, ".tsv", sep=""), quote=FALSE, sep='\t', col.names = NA)
-
