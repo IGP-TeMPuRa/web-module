@@ -9,7 +9,9 @@
 ##################
 #A few important tips:
 
-#Larger taxa, ex: aves take a several mins to process the tsv initially and can potentially consume a lot of working memory. I wouldnt run any taxa that is very large, (insecta for example) until we know what kind of memory resources it will consume.
+#There are two options for parsing the tsv, you can either download the tsv directly from the BOLD API OR you can use a tsv you have previously downloaded
+
+#Larger taxa, ex: aves take a several mins to process the tsv initially and run the sequence alignment. This can potentially consume a lot of working memory. I wouldnt run any taxa that is very large, (insecta for example) until we know what kind of memory resources it will consume.
 #Ive found taxon=reptilia, geo=all to be really great for testing, it usually generates between 5 and 15 pairings and processing times are short
 
 #Some tips for using the BOLD API since this is what is used to grab the relevant data we need: 
@@ -25,7 +27,7 @@
 #Important dataframes:
 #dfMatchOverallBest is the finalized dataframe that contains all of the finalized pairings and outgroupings
 #dfMatchOverall is the dataframe of ingroup pairings before bins with multiple pairings are eliminated based on distance
-#dfMatchOverall1 is sort of an intermediate df between MatchOverall and MatchOverallBest that shows which pairing was chosen for each bin
+#dfMatchOverallPair is sort of an intermediate df between MatchOverall and MatchOverallBest that shows which pairing was chosen for each bin
 #dfInitial is the dataframe first produced by the import from BOLD and is trimmed by lat, bin_uri etc.
 #dfLatLon just contains relevant information for each bin: bin size, maximum lat, median lat, minimum lat, median lon
 #dfBestOutGroup contains the associated outgroupings only but does have a column for which pairing its associated with
@@ -45,14 +47,26 @@ library(ape)
 #Decided to use the data.tables package for one component of the code since I was having difficulties merging two df's
 install.packages("data.table")
 library(data.table)
-
+#Speeds up parsing of the tsv file with read_tsv function
+install.packages("readr")
+library(readr)
+#For sequence alignments we need the biostrings (DNAStringSet function) and msa packages, run each of these commands individually, sometimes it skips the libraries
+source("https://bioconductor.org/biocLite.R")
+biocLite("Biostrings")
+library("Biostrings")
+biocLite("msa")
+library("msa")
 #################
 
 #R Commands:
 
 #First we download the TSV and convert it into a dataframe, this URL is what is modified by the user and will determine the taxa, geographic region etc.
-dfInitial <- read.table("http://www.boldsystems.org/index.php/API_Public/combined?taxon=Aves&geo=all&format=tsv", sep="\t", header=TRUE, fill = TRUE)
-  
+dfInitial <- read_tsv("http://www.boldsystems.org/index.php/API_Public/combined?taxon=Tardigrada&geo=all&format=tsv")
+
+#If you want to run pre downloaded BOLD tsv's, this will let you choose a path to that tsv and parse
+#tsvParseDoc <- file.choose()
+#dfInitial <- read_tsv(tsvParseDoc)
+
 #Filtering this df according to the relevant columns we need
 dfInitial <- (dfInitial[,c("recordID","bin_uri","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","lat","lon","nucleotides")])
 colnames(dfInitial)[1] <- "record_id"
@@ -73,24 +87,15 @@ dfInitial$lonNum <- lonNum
 containBin <- grep( "[:]", dfInitial$bin_uri)
 dfInitial<-dfInitial[containBin,]
 
+#Getting rid of any records that dont have sequence data (sometimes there are a few)
+containNucleotides <- grep( "[ACGT]", dfInitial$nucleotides)
+dfInitial<-dfInitial[containNucleotides,]
+
 #Modifying Bin column slightly to remove "BIN:"
 dfInitial$bin_uri <- substr(dfInitial$bin_uri, 6 , 13)
 
-#Need to trim down each sequence if greater than 600 bp to a uniform length to be used in genetic distance calculation and in the output file
-#Decided initially to trim the standard 657/658 bp sequence by 27 bp on the 5' side and 31 on the 3' side of the sequence to eliminate poor quality sequence data on either side
-#Still unsure on the start position of the COI(cox) reading frame but the start and stop positions can be easily edited to match the open reading frame start of COI
-dfInitial$nucleotides <- substr(dfInitial$nucleotides, 27 , 626)
+#Dataframe Organization
 dfInitial <- (dfInitial[,c("record_id","bin_uri","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","latNum","lonNum")])
-
-#checking to make sure no sequences are not equal to 600 bp since we want a 600 bp length for the analysis
-#Makes it easier as we are standardizing to one seq length intially
-sLengths <- with(dfInitial, nchar(as.character(nucleotides))) 
-dfInitial$sLengths <- sLengths
-seqFilter <- which(dfInitial$sLength!=600)
-
-#Finally removing the ones not equal to 600 bp
-if(length(seqFilter) >0){
-  dfInitial <- dfInitial[-seqFilter,]}
 
 #We first have to determine a median latitude for each bin so this will involve subdividing the dataframe into smaller dataframes by BIN
 
@@ -132,7 +137,7 @@ dfRandomBinSeq <- merge(dfRandomBinSeq, dfInitial, by.x = "record_id", by.y = "r
 #Can now merge dfLatLon with RandomBinseq (but retain the name RandomBinSeq) to create one dataframe containg all pertinent data we need and can reference back to from the match overall dataframe produced later on
 dfRandomBinSeq <- merge(dfRandomBinSeq, dfLatLon, by.x = "bin_uri")
 #Getting rid of latNum and lonNum since we dont need these anymore, we only need the median Lat/Lon values 
-dfRandomBinSeq <- (dfRandomBinSeq[,c("bin_uri","binSize","record_id","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","sLengths","medianLat","latMin","latMax","medianLon")])
+dfRandomBinSeq <- (dfRandomBinSeq[,c("bin_uri","binSize","record_id","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLat","latMin","latMax","medianLon")])
 #Adding an index column to reference later with Match overall dataframe
 dfRandomBinSeq$ind <- row.names(dfRandomBinSeq)
 
@@ -143,23 +148,23 @@ matrixLatitudeDistance <- as.matrix( dist(dfRandomBinSeq$medianLat) )
 #Convert to dataframe since its easier to manipulate, this dataframe will be used further down
 dfLatitudeDistance <-as.data.frame(matrixLatitudeDistance)
 
-#Now determining sister pairs based on a genetic distance model, these pairings will then be matched with pairings generated by the latitude distance to find those that meet both criteria
-#Extracting the nucleotide column from dfRandomBinSeq to grab the actual sequencing data
-dfRandomBinSeqCol <- (dfRandomBinSeq[,c("nucleotides")])
+#Converting sequences to DNAStringSet format
+dnaStringSet <- DNAStringSet(dfRandomBinSeq$nucleotides)
 
-#In order to calculate genetic distances, sequences must be in a class of "DNAbin" according to the Ape package, so first we have to split by base pair, align the sequences and then convert to DNAbin format for use in the Ape package
-randomBinSeqSplit <-strsplit(dfRandomBinSeqCol, "")
-DNAalign <- as.alignment(randomBinSeqSplit)
-DNAbin <- as.DNAbin(DNAalign)
+#Multiple sequence alignment using msa package - 3 different algorithms can be used for this: ClustalW, ClustalOmega, MUSCLE, using the default of ClustalW for testing
+#Sequence alignment package can be found here: http://master.bioconductor.org/packages/3.2/bioc/vignettes/msa/inst/doc/msa.pdf
+#This could take several minutes to even hours in some cases depending on the taxa
+seqAlignment <- msa(dnaStringSet)
+
+#Conversion to DNAbin format before genetic distance computation matrix
+DNAbin <- as.DNAbin(seqAlignment)
 
 #Now for the computation of genetic distance, several models can be used - "raw", "N", "TS", "TV", "JC69", "K80" (the default), "F81", "K81", "F84", "BH87", "T92", "TN93", "GG95", "logdet"
 #Details on each model can be found here: http://www.inside-r.org/packages/cran/ape/docs/dist.dna
-#Starting with the K80 model since this was one of the models suggested by Sally
-
+#Starting with the K80 model 
 #Note that this has only been tested with K80 currently so unsure as to how it will perform with other models
-
 matrixGeneticDistance <- dist.dna(DNAbin, model = "K80", as.matrix = TRUE, pairwise.deletion = TRUE)
-#convert to dataframe)
+#convert to dataframe
 dfGeneticDistance <-as.data.frame(matrixGeneticDistance)
 #Putting it into a stack (each column concatenated into one long column of indexes and values) so it can be easily subsetted
 dfGeneticDistanceStack <-stack(dfGeneticDistance)
@@ -190,18 +195,21 @@ dfMatchOverall$inGroupDistx1.3 <- dfMatchOverall$values * 1.3
 dfMatchOverall$inGroupPairing <- rep(1:(nrow(dfMatchOverall)/2), each = 2)
 
 #Reorganizing and renaming some columns in MatchOverall dataframe to make more easily readable 
-dfMatchOverall <- (dfMatchOverall[,c("inGroupPairing","bin_uri","record_id","values","inGroupDistx1.3","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","sLengths","medianLon","ind")])
+dfMatchOverall <- (dfMatchOverall[,c("inGroupPairing","record_id","bin_uri","values","inGroupDistx1.3","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLon","ind")])
 colnames(dfMatchOverall)[4] <- "inGroupDist"
-colnames(dfMatchOverall)[27] <- "indexNo"
+colnames(dfMatchOverall)[26] <- "indexNo"
 
-#For bins that have multiple pairings we can determine which pairing has the smallest divergence and remove the others in order to choose the best possible one
+#For bins that have multiple pairings we can select which pairing has the smallest divergence to its other ingroup member since the pairings are ordered according to distance
 #Basically we are taking the best possible pairing per bin based on divergence
-#I will call this one dfMatchOverall1
-dfMatchOverall1 <- by(dfMatchOverall, dfMatchOverall["bin_uri"], head, n=1)
-dfMatchOverall1 <- Reduce(rbind, dfMatchOverall1)
-dfMatchOverall1 <- subset(dfMatchOverall1, duplicated(dfMatchOverall1$inGroupPairing))
-#Can then take our best pairings and subset them against the original dfMatchOverall dataframe, I will call this dfMatchOverallBest
-dfMatchOverallBest <- subset(dfMatchOverall, dfMatchOverall$inGroupPairing %in% dfMatchOverall1$inGroupPairing)
+#This dataframe will be dfMatchOverallPair
+
+#This command selects the top pairing for each bin since the bins are ordered already
+dfMatchOverallPair <- by(dfMatchOverall, dfMatchOverall["bin_uri"], head, n=1)
+#Makes another dataframe
+dfMatchOverallPair <- Reduce(rbind, dfMatchOverallPair)
+dfMatchOverallPair <- subset(dfMatchOverallPair, duplicated(dfMatchOverallPair$inGroupPairing))
+#Can then take our best pairings and subset them against the original dfMatchOverall dataframe to get the finalized dataframe of ingroup pairings which will be called dfMatchOverallBest
+dfMatchOverallBest <- subset(dfMatchOverall, dfMatchOverall$inGroupPairing %in% dfMatchOverallPair$inGroupPairing)
 
 #We now have the best possible pairings from each bin based on both latitude and distance criteria!
 
@@ -210,12 +218,12 @@ dfMatchOverallBest <- subset(dfMatchOverall, dfMatchOverall$inGroupPairing %in% 
 #Can find suitable outgroupings based on the calculated mimumum genetic distances of the ingroupdist1.3x column and indexNo columns
 #First we can use the indexNo to subset the dfGeneticDistanceStackDataframe according to indexes represented in the final pairings, this will be called dfBestOutGroup
 #This will essentially limit our outgroup bin distances to those associated with the ingroup bin distances
-dfBestOutGroup <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %in% dfMatchOverall1$indexNo)
+dfBestOutGroup <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %in% dfMatchOverallPair$indexNo)
 
-#Determining shared indices and putting in a variable
-outGroupCandidates <- foreach(i=1:nrow(dfMatchOverall1)) %do% which(dfBestOutGroup$ind == dfMatchOverall1$indexNo[i])
+#Determining shared indices between pairings and dfBestOutGroup
+outGroupCandidates <- foreach(i=1:nrow(dfMatchOverallPair)) %do% which(dfBestOutGroup$ind == dfMatchOverallPair$indexNo[i])
 #Determining indices with correct outgroup distance 
-outGroupCandidates1 <- foreach(i=1:nrow(dfMatchOverall1)) %do% which(dfBestOutGroup$values >= dfMatchOverall1$inGroupDistx1.3[i])
+outGroupCandidates1 <- foreach(i=1:nrow(dfMatchOverallPair)) %do% which(dfBestOutGroup$values >= dfMatchOverallPair$inGroupDistx1.3[i])
 #Intersection of the two using mapply to find the correct outgroupings for each pairing
 outGroupCandidates2 <- mapply(intersect,outGroupCandidates,outGroupCandidates1)
 #Unlist to make one easy to handle vector
@@ -246,7 +254,7 @@ j=0:(nrow(dfBestOutGroup)-1)
 dfBestOutGroup$identity <- (dfBestOutGroup$rownum / (nrow(dfRandomBinSeq))-j) * (nrow(dfRandomBinSeq))
 #Also ordering dfBestOutGroup by identity
 dfBestOutGroup<- dfBestOutGroup[order(dfBestOutGroup$identity),] 
-colnames(dfRandomBinSeq)[24] <- "identity"
+colnames(dfRandomBinSeq)[23] <- "identity"
 #Converting to data table format and setting keys in order to properly merge
 dfRandomBinSeq <- data.table(dfRandomBinSeq)
 dfBestOutGroup <- data.table(dfBestOutGroup)
@@ -263,16 +271,16 @@ dfBestOutGroup <- merge(dfBestOutGroup, dfRandomBinSeq, by.x = "identity", by.y 
 dfBestOutGroup <- as.data.frame(dfBestOutGroup)
 
 #Can rename certain columns to more closely resemble dfMatchOverall 
-dfBestOutGroup <- dfBestOutGroup[,c("bin_uri","record_id","values","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","sLengths","medianLon","identity")]
+dfBestOutGroup <- dfBestOutGroup[,c("bin_uri","record_id","values","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLon","identity")]
 colnames(dfBestOutGroup)[3] <- "outGroupDist"
-colnames(dfBestOutGroup)[25] <- "indexNo"
+colnames(dfBestOutGroup)[24] <- "indexNo"
 
 #Now just need to associate our outgroup with the pairings by adding another column to the outgroup df 
 #Just ordering values by order of values in ClosestOutGroup to ensure we have the correct order
 dfBestOutGroup <- dfBestOutGroup[order(match(dfBestOutGroup[,3],dfClosestOutGroup[,1])),]
 
 #Appending the ingrouppairing column to the Outgroup dataframe so we know which pairing its associated with
-dfBestOutGroup$associatedInGroup <- dfMatchOverall1$inGroupPairing
+dfBestOutGroup$associatedInGroup <- dfMatchOverallPair$inGroupPairing
 
 #Can now merge eveything together into the MatchOverallBest, this will act as our finalized dataframe
 #Note that each outgroup will be duplicated for each member of the pairing
@@ -281,19 +289,20 @@ dfBestOutGroup$associatedInGroup <- dfMatchOverall1$inGroupPairing
 dfMatchOverallBest <- merge(dfMatchOverallBest, dfBestOutGroup, by.x = "inGroupPairing", by.y = "associatedInGroup")
 
 #Note there sometimes will be a few pairings that dont have a suitable outgroup(couldnt find a bin with the suitable outgroup distance) so we can filter those out
-colnames(dfMatchOverallBest)[28] <- "bin_uriOutGroup"
-noOutGroupFilter<-which(is.na(dfMatchOverallBest$bin_uriOutGroup))
+noOutGroupFilter<-which(is.na(dfMatchOverallBest$bin_uri.y))
 if(length(noOutGroupFilter) >0){
   dfMatchOverallBest<-dfMatchOverallBest[-noOutGroupFilter,]}
 
 #Now we have both outgroups and suitable pairings!
 
-#Ouput the contents to a CSV file in CSV format or TSV file if you prefer
+############
+#Ouput to CSV or TSV
+
 #Should output the directory you have set in Rstudio
 
 #Defining another variable to give a unqiue name to the CSV
 #Name would be what you specify it to be, R will prompt you to insert a name for the file in the console:
-filename <- readline(prompt="")
+#filename <- readline(prompt="")
 
 #Once you have a name, uncomment one the of the write table commands and run that command to get a file output
 
@@ -302,3 +311,4 @@ filename <- readline(prompt="")
 
 #TSV
 #write.table(dfMatchOverallBest, file=paste(filename, ".tsv", sep=""), quote=FALSE, sep='\t', col.names = NA)
+#############
