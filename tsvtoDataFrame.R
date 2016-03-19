@@ -12,7 +12,7 @@
 #There are two options for parsing the tsv, you can either download the tsv directly from the BOLD API OR you can use a tsv you have previously downloaded
 
 #Larger taxa, ex: aves take a several mins to process the tsv initially and run the sequence alignment. This can potentially consume a lot of working memory. I wouldnt run any taxa that is very large, (insecta for example) until we know what kind of memory resources it will consume.
-#Ive found taxon=reptilia, geo=all to be really great for testing, it usually generates between 5 and 15 pairings and processing times are short
+#Ive found taxon=reptilia, geo=all to be really great for testing, it usually generates around 60 pairings and processing times are short
 
 #Some tips for using the BOLD API since this is what is used to grab the relevant data we need: 
 #To see details on how to use the bold API, go to http://www.boldsystems.org/index.php/resources/api?type=webservices
@@ -88,7 +88,7 @@ containBin <- grep( "[:]", dfInitial$bin_uri)
 dfInitial<-dfInitial[containBin,]
 
 #Getting rid of any records that dont have sequence data (sometimes there are a few)
-containNucleotides <- grep( "[ACGT]", dfInitial$nucleotides)
+containNucleotides <- grep( "[ACGTN]", dfInitial$nucleotides)
 dfInitial<-dfInitial[containNucleotides,]
 
 #Modifying Bin column slightly to remove "BIN:"
@@ -292,6 +292,22 @@ dfMatchOverallBest <- merge(dfMatchOverallBest, dfBestOutGroup, by.x = "inGroupP
 noOutGroupFilter<-which(is.na(dfMatchOverallBest$bin_uri.y))
 if(length(noOutGroupFilter) >0){
   dfMatchOverallBest<-dfMatchOverallBest[-noOutGroupFilter,]}
+
+#As one last step, we have to determine the outgroup distance to the other ingroup lineage, since we only have a distance for one lineage
+#we determine the bin_uri's of the other lineage for each pairing
+oppositeLineage <- setdiff(dfMatchOverallBest$bin_uri.x, dfMatchOverallPair$bin_uri)
+#Make into a dataframe
+dfOppositeLineage <- as.data.frame(oppositeLineage)
+dfOppositeLineage <- dfMatchOverallBest[dfMatchOverallBest$bin_uri.x %in% dfOppositeLineage$oppositeLineage,]
+#Subset according to our Gentic distance matrix to grab the distance for each lineage
+outGroupDistOppositeLineage <- intersect(dfGeneticDistance[dfOppositeLineage$indexNo.x,], dfGeneticDistance[dfOppositeLineage$indexNo.y,])
+colnames(outGroupDistOppositeLineage)[2] <- "outGroupDist"
+#Add it to the dfOppositeLineage df
+dfOppositeLineage$outGroupDist <- outGroupDistOppositeLineage$outGroupDist
+#Add outgroup to first lineage
+dfMatchOverallPair <- merge(dfMatchOverallPair, dfBestOutGroup, by.x = "inGroupPairing", by.y = "associatedInGroup")
+#Concatenate second lineage to first lineage to second lineage and revise MatchOverallBest accordingly
+dfMatchOverallBest <-  rbind(dfMatchOverallPair, dfOppositeLineage)
 
 #Now we have both outgroups and suitable pairings!
 
