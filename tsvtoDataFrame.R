@@ -61,7 +61,7 @@ library("msa")
 #R Commands:
 
 #First we download the TSV and convert it into a dataframe, this URL is what is modified by the user and will determine the taxa, geographic region etc.
-dfInitial <- read_tsv("http://www.boldsystems.org/index.php/API_Public/combined?taxon=Tardigrada&geo=all&format=tsv")
+dfInitial <- read_tsv("http://www.boldsystems.org/index.php/API_Public/combined?taxon=Porifera&geo=all&format=tsv")
 
 #If you want to run pre downloaded BOLD tsv's, this will let you choose a path to that tsv and parse
 #tsvParseDoc <- file.choose()
@@ -298,18 +298,20 @@ if(length(noOutGroupFilter) >0){
 oppositeLineage <- setdiff(dfMatchOverallBest$bin_uri.x, dfMatchOverallPair$bin_uri)
 #Make into a dataframe
 dfOppositeLineage <- as.data.frame(oppositeLineage)
-dfOppositeLineage <- dfMatchOverallBest[dfMatchOverallBest$bin_uri.x %in% dfOppositeLineage$oppositeLineage,]
+#Merge this with MatchoverallBest to get all the relevant data we need
+dfOppositeLineage <- merge(dfMatchOverallBest, dfOppositeLineage, by.x = "bin_uri.x", by.y = "oppositeLineage")
 #Subset according to our Gentic distance matrix to grab the distance for each lineage
-outGroupDistOppositeLineage <- intersect(dfGeneticDistance[dfOppositeLineage$indexNo.x,], dfGeneticDistance[dfOppositeLineage$indexNo.y,])
-colnames(outGroupDistOppositeLineage)[2] <- "outGroupDist"
+outGroupDistOppositeLineage <- foreach(k=1:nrow(dfOppositeLineage)) %do% dfGeneticDistance[dfOppositeLineage$indexNo.x[k],dfOppositeLineage$indexNo.y[k]]
 #Add it to the dfOppositeLineage df
-dfOppositeLineage$outGroupDist <- outGroupDistOppositeLineage$outGroupDist
+dfOppositeLineage$outGroupDist <- outGroupDistOppositeLineage
 #Add outgroup to first lineage
 dfMatchOverallPair <- merge(dfMatchOverallPair, dfBestOutGroup, by.x = "inGroupPairing", by.y = "associatedInGroup")
-#Concatenate second lineage to first lineage to second lineage and revise MatchOverallBest accordingly
+#Add second lineage to first lineage and revise MatchOverallBest
 dfMatchOverallBest <-  rbind(dfMatchOverallPair, dfOppositeLineage)
+#Order by pairing once again
+dfMatchOverallBest<- dfMatchOverallBest[order(dfMatchOverallBest$inGroupPairing),] 
 
-#Now we have both outgroups and suitable pairings!
+#Now we have both outgroups and suitable pairings with distances from outgroup for both lineages of a pairing!
 
 ############
 #Ouput to CSV or TSV
