@@ -2,7 +2,7 @@
 #Authored by BIF IGP Group Tempura
 #Major contributions by Matthew Orton to this script
 
-#This program will allow for the generation of latitudinally separated sister pairings and associated outgroupings from ANY taxa and geographical region found on BOLD in one streamlined R pipeline!
+#This program will allow for the generation of latitudinally separated sister pairings and associated outgroupings from ANY taxa (provided they have a suitable reference sequence) and geographical region found on BOLD in one streamlined R pipeline!
 #In this new and improved iteration, data is translated directly from a BOLD tsv file of the users choosing to a dataframe in R
 #The generated sister pairs and outgroups can then be written to a csv or tsv and the file will appear in the current working directory of R
 
@@ -24,15 +24,16 @@
 
 #Important dataframes:
 #dfMatchOverallBest is the finalized dataframe that contains all of the finalized pairings and outgroupings
-#dfMatchOverall is the dataframe of ingroup pairings before bins with multiple pairings are eliminated based on distance and before the problem of pseudoreplication is addressed
-#dfMatchOverallLineage1 and Lineage2 represent dataframes each member of the pairing
+#dfMatchOverall is the dataframe of ingroup pairings before bins with multiple pairings are eliminated based on distance and before the problems of pseudoreplication or latitudinal range is addressed, it is used as a reference to see which pairings are intially created
+#dfMatchOverallLineage1 and Lineage2 represent dataframes for each lineage of each pairing
 #dfInitial is the dataframe first produced by the import from BOLD and is trimmed by lat, bin_uri etc.
 #dfLatLon just contains relevant information for each bin: bin size, maximum lat, median lat, minimum lat, median lon
-#dfBestOutGroupL1 and L2 contain the associated outgroupings only (for each lineage) but each does have a column for which pairing its associated with
+#dfBestOutGroupL1 and L2 contain the associated outgroupings only (for each lineage) but each one does have a column for which pairing its associated with
 #dfLatitudeDistance and dfGeneticDistance are matrices converted into dataframes that show all possible distances between bins
 #dfAllSeq is the dataframe that contains sequence data for both consensus sequences and nonconsensus (bins with one member to them) sequences
 #dfGeneticDistanceStack is dfGeneticDistance with all columns concatenated into one long column, it is used to grab index numbers for each pairing
-#dfDistancePair represents pairwise distances between lineages in the final pairings only
+#dfDistancePair represents pairwise distances between lineages in the final pairings only, it used to determine if pseduoreplication is present in some pairings
+#dfConsensus and dfNonconsensus are dataframes with the consensus and nonconcensus sequences respectively but is also similar to dfLatLon in the data it contains
 
 #################
 #Packages required
@@ -52,13 +53,20 @@ biocLite("Biostrings")
 library("Biostrings")
 biocLite("msa")
 library("msa")
+#For overlapping latitude regions we need the Desctools package
+install.packages("DescTools")
+library(DescTools)
+#Also adding data tables for table merging
+install.packages("data.table")
+library(data.table)
+
 #################
 #R Commands:
 
 #TSV Parsing
 
 #First we download the TSV and convert it into a dataframe, this URL is what is modified by the user and will determine the taxa, geographic region etc.
-dfInitial <- read_tsv("http://www.boldsystems.org/index.php/API_Public/combined?taxon=Tardigrada&geo=all&format=tsv")
+dfInitial <- read_tsv("http://www.boldsystems.org/index.php/API_Public/combined?taxon=Sphingidae&geo=all&format=tsv")
 
 #If you want to run pre downloaded BOLD tsv's, this will let you choose a path to that tsv and parse
 #tsvParseDoc <- file.choose()
@@ -167,7 +175,7 @@ if(length(largeBin) >0){
   #We can then extract the consensus sequence from each individual alignment
   consensusSeq <- foreach(i=1:binNumberConsensus) %do% consensusString(alignment1[[i]])
   
-  #Adding out consensusSeq to dfConsensus 
+  #Adding our consensusSeq to dfConsensus 
   dfConsensus <- by(dfConsensus, dfConsensus["bin_uri"], head, n=1)
   dfConsensus <- Reduce(rbind, dfConsensus)
   dfConsensus$nucleotides <- consensusSeq
@@ -200,18 +208,21 @@ if(length(largeBin) >0){
 distLat <- dist(dfAllSeq$medianLat)
 #Then we convert this to a matrix
 matrixLatitudeDistance <- as.matrix( dist(dfAllSeq$medianLat) )
-#Then convert to dataframe since its easier to manipulate, this dataframe will be used further down
+#Then convert to dataframe since its easier to manipulate, this dataframe will be used further down (in testing I found matrices tend to be less reliable for further manipulations)
 dfLatitudeDistance <-as.data.frame(matrixLatitudeDistance)
 
 #############
-#Multiple Sequence Alignment of All Sequences and Pairwise Distance determination with TN93
-#This involves aligning all sequences and using those sequences in a pairwise distance computation
+#Multiple Sequence Alignment of All Sequences, Sequence Trimming according to a Reference Sequence and Pairwise Distance determination with TN93
 
-#First have to convert the nucleotide column to type character for this to work
-dfAllSeq$nucleotides <- with(dfAllSeq, as.character(nucleotides)) 
+#Lets first start off by identifying our reference sequence
+#we can make a smaller dataframe with the name of the taxa as one column and the sequence as another column
+#Can call this dfRefSeq
 
-#Converting all sequences to DNAStringSet format again
-dnaStringSet2 <- DNAStringSet(dfAllSeq$nucleotides)
+#We also have to convert to type character for this to work
+alignmentSequences <- as.character(dfAllSeq$nucleotides)
+
+#Converting all sequences in dfAllSeq to DNAStringSet format, this is the format required for the alignment
+dnaStringSet2 <- DNAStringSet(alignmentSequences)
 
 #Run a multiple sequence alignment of all sequences both consensus and nonconsensus
 #As mentioned using the default of ClustalW
@@ -234,7 +245,7 @@ dfGeneticDistanceStack <-stack(dfGeneticDistance)
 #Finding appropriate pairings according to latitude and distance criteria
 
 #So now we have two dataframes, we can find ideal matchings based on less than 15% divergence and 20 degrees latitude separation
-#These values can easily be edited to suit the user
+#These values can easily be edited to add more or less stringency to the program
 #Will produce lists with indexes of each match according to our set criteria
 geneticDistanceMatchI <- which(dfGeneticDistance<=0.15)
 latitudeDistanceMatch <- which(dfLatitudeDistance>=20)
@@ -251,7 +262,7 @@ dfMatchOverall <- merge(dfAllSeq, dfMatchOverall, by.x = "ind", by.y = "ind")
 #Pairings will be ordered according to genetic distance, least divergent pairing to most divergent pairing
 dfMatchOverall <- dfMatchOverall[order(dfMatchOverall$values),] 
 
-#Then we can multiply these distance values by 1.3 to determine the ideal minimum outgroup distance from the pairings, we put this in another column in the matchOverall dataframe
+#Then we can multiply these distance values by 1.3 to determine the minimum outgroup distance from the pairings, we put this in another column in the matchOverall dataframe
 #This minimum outgroup distance could also be a user adjustable parameter
 dfMatchOverall$inGroupDistx1.3 <- dfMatchOverall$values * 1.3
 
@@ -264,7 +275,7 @@ colnames(dfMatchOverall)[4] <- "inGroupDist"
 colnames(dfMatchOverall)[26] <- "indexNo"
 
 ##############
-#Taking the Best Possible Pairings and Creating Dataframes for each Lineage and each Complete Pairing
+#Taking the Best Possible Pairings (no bin duplicated in any pairing) and Creating Dataframes for each Pairing Lineage and each Complete Pairing (both lineages)
 
 #For bins that have multiple pairings associated with them we can select which pairing has the smallest divergence to its other ingroup member since the pairings are ordered according to distance
 #Basically we are taking the best possible pairing per bin based on divergence such that a bin would never be duplicated in multiple pairings
@@ -277,7 +288,7 @@ dfMatchOverallLineage1 <- subset(dfMatchOverallLineage1, duplicated(dfMatchOvera
 #To get both lineages for each pairing we do another subset against dfMatchOverall, we can call this dfMatchOverallBest
 dfMatchOverallBest <- subset(dfMatchOverall, dfMatchOverall$inGroupPairing %in% dfMatchOverallLineage1$inGroupPairing)
 
-#To get the second lineage of each sister pairing we can subtract dfMatchOverallLineage1 by dfMatchOverall to get the bin uri's for the alternative pairings
+#To get the second lineage of each sister pairing we can subtract dfMatchOverallLineage1 by dfMatchOverall to get the bin uri's for the alternative lineage
 dfMatchOverallLineage2 <- setdiff(dfMatchOverallBest$bin_uri, dfMatchOverallLineage1$bin_uri)
 dfMatchOverallLineage2 <- as.data.frame(dfMatchOverallLineage2)
 colnames(dfMatchOverallLineage2)[1] <- "bin_uri"
@@ -285,6 +296,75 @@ colnames(dfMatchOverallLineage2)[1] <- "bin_uri"
 dfMatchOverallLineage2 <- merge(dfMatchOverallLineage2, dfMatchOverallBest, all.x = TRUE)
 #Reorganization of columns for second lineage
 dfMatchOverallLineage2 <- (dfMatchOverallLineage2[,c("inGroupPairing","record_id","bin_uri","inGroupDist","inGroupDistx1.3","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLon","indexNo")])
+
+##############
+#Eliminating Pairings based on Overlapping Latitudinal Range
+
+#Next we can work on establishing latitudinal ranges for each pairing
+#If the two lineages of a pairing have overlapping latitude regions of greater than 25% then we would not consider that pairing as a viable pairing
+#This is because we want each lineage of a pairing to meet an appropriate difference in latitude
+
+#we can define the overlap range threshold as 25% of the latitude range of L1
+#If an overlap is greater than this value we would discard with this pairing
+#Of course this value could be easily modified to add more or less stringency to the script
+rangeThreshold <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% ((dfMatchOverallLineage1$latMax[l] - dfMatchOverallLineage1$latMin[l]) * 0.25) 
+
+#Define our latitude ranges for each lineage of a pairing
+rangeL1 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% range(dfMatchOverallLineage1$latMax[l], dfMatchOverallLineage1$latMin[l])
+rangeL2 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% range(dfMatchOverallLineage2$latMax[l], dfMatchOverallLineage2$latMin[l])
+
+#Then we can determine the overlap region between them using the Overlap function from the Desctools package
+#Overlap will return an absolute value so we dont have to worry about negatives for overlap values
+overlapValue <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% Overlap(rangeL1[[l]], rangeL2[[l]])
+
+#Then if there is a range overlap between two lineages in a pairing, we can determine if this overlap is actually larger than the 25% value of rangeThreshold for each individual pairing
+rangeOverlapCheck <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% which(rangeThreshold[[l]]<overlapValue[[l]])
+
+#Then overlaps values exceeding that 25% value we set should be returned as an integer of 1, if an overlap does not exceed this value, then it will return a value of 0
+#If there is a value that meets these criteria, its associated pairing will be removed from the MatchOverallBest and lineage dataframes (we will retain it in dfMatchOverall for reference)
+#This will name each element of rangeOverlapCheck with the inGroupPairing number to identify the pairing we need to eliminate
+names(rangeOverlapCheck) <- paste0(dfMatchOverallLineage1$inGroupPairing)
+#Identify which pairing in rangeOverlapCheck is greater than 0
+overlapInd <- which(rangeOverlapCheck>0)
+#if overlapInd is not empty:
+if(length(overlapInd)>0){
+  #Eliminate based on that pairing number(s) for MatchOverallLineage1
+  dfMatchOverallLineage1 <- dfMatchOverallLineage1[-overlapInd,]
+  #Now subset to both dfMatchOverallBest and dfMatchOverallLineage2
+  dfMatchOverallBest <- subset(dfMatchOverallBest, dfMatchOverallBest$inGroupPairing %in% dfMatchOverallLineage1$inGroupPairing)
+  dfMatchOverallLineage2 <- subset(dfMatchOverallLineage2, dfMatchOverallLineage2$inGroupPairing %in% dfMatchOverallLineage1$inGroupPairing)
+}
+
+
+###############
+#Identifying and Averaging PseudoReplicates
+
+#To check for the phylogenetics problem of pseudoreplication we can generate another smaller distance matrix with our selected pairings only
+#If a bin from one pairing is actually closer to a bin from another pairing (as opposed to its paired lineage) than we would have to average the results of those two pairings
+
+#First lets order our lineage according to distance (makes things easier to understand and ensure we have the right ordering)
+dfMatchOverallLineage1 <- dfMatchOverallLineage1[order(dfMatchOverallLineage1$inGroupDist),] 
+dfMatchOverallLineage2 <- dfMatchOverallLineage2[order(dfMatchOverallLineage2$inGroupDist),] 
+
+#To do this we can subset our original pairwise distance matrix with the pairing indices of each lineage only
+#We will call this new dataframe dfDistancePair
+dfDistancePair <- dfGeneticDistance[dfMatchOverallLineage1$indexNo,dfMatchOverallLineage2$indexNo]
+
+#For each column and row of this matrix, if a distance value is lower than the pairwise distances of each pairing than we know there is another bin which is actually closer
+#We check for this by using our pairwise distances from the dfMatchOverallLineages dataframes
+#First we check if another bin is closer for each row of the distance pair matrix
+closerBinRow <- foreach(j=1:nrow(dfDistancePair)) %do% which(dfDistancePair[dfMatchOverallLineage1$indexNo,dfMatchOverallLineage2$indexNo[j]]<dfMatchOverallLineage1$inGroupDist[j])
+
+#Then we check if another bin is closer for each column of the distance pair matrix
+closerBinColumn <- foreach(j=1:nrow(dfDistancePair)) %do% which(dfDistancePair[dfMatchOverallLineage1$indexNo[j],dfMatchOverallLineage2$indexNo]<dfMatchOverallLineage1$inGroupDist[j])
+
+#We then name each element of closerBinRow with the inGroupPairing number to identify the pairings we need to average
+names(closerBinRow) <- paste0(dfMatchOverallLineage1$inGroupPairing)
+
+#we then name each element of closerBinColumn with the inGroupPairing number to identify the pairings we need to average
+names(closerBinColumn) <- paste0(dfMatchOverallLineage1$inGroupPairing)
+
+#Still have to determine how to average pseudoreplicates once identified
 
 ################
 #Outgroup determination for each Pairing
@@ -296,6 +376,8 @@ dfMatchOverallLineage2 <- (dfMatchOverallLineage2[,c("inGroupPairing","record_id
 #We can use the indexNo to subset the dfGeneticDistanceStackDataframe according to indexes represented in lineage 1, this will be called dfBestOutGroupL1
 #This will essentially limit our outgroup distances to those associated with lineage1
 dfBestOutGroupL1 <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %in% dfMatchOverallLineage1$indexNo)
+#We also order by Lineage1
+dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,2],dfMatchOverallLineage1[,26])),]
 
 #Then we can find which indices match lineage1 with bestoutgroup l1
 outGroupCandidatesL1a <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% which(dfBestOutGroupL1$ind == dfMatchOverallLineage1$indexNo[i])
@@ -312,6 +394,7 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$rownum %in% outGroupCandid
 
 #Now for the second lineage, we go through the same process
 dfBestOutGroupL2 <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %in% dfMatchOverallLineage2$indexNo)
+dfBestOutGroupL2 <- dfBestOutGroupL2[order(match(dfBestOutGroupL2[,2],dfMatchOverallLineage2[,26])),]
 outGroupCandidatesL2a <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% which(dfBestOutGroupL2$ind == dfMatchOverallLineage2$indexNo[i])
 outGroupCandidatesL2b <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% which(dfBestOutGroupL2$values >= dfMatchOverallLineage2$inGroupDistx1.3[i])
 outGroupCandidatesL2c <- mapply(intersect,outGroupCandidatesL2a,outGroupCandidatesL2b)
@@ -320,8 +403,9 @@ dfBestOutGroupL2$rownum<-seq.int(nrow(dfBestOutGroupL2))
 dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% outGroupCandidatesL2c, ]
 
 #Now we find the intersection between outGroupListL1 and outGroupListL2, this will determine which outgroup candidates are shared between both lineages
-#Doing this for both L1 and L2
 dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$rownum %in% dfBestOutGroupL2$rownum, ]
+dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% dfBestOutGroupL1$rownum, ]
+
 #Then we break this dataframe down by index into a list
 bestOutGroupListL1 <- lapply(unique(dfBestOutGroupL1$ind), function(x) dfBestOutGroupL1[dfBestOutGroupL1$ind == x,])
 #We then find the value closest to the 1.3 divergence value
@@ -331,7 +415,6 @@ dfMinOutGroupL1 <- as.data.frame(minOutGroupL1)
 #Again subset to dfBestOutGroup to get indices of the closest outgrouping values
 dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$values %in% dfMinOutGroupL1$minOutGroupL1,]
 
-#Again for L2
 #For L2 its a bit different since we are choosing outgroups which would be shared between both lineages
 #we simply subset dfBestOutGroupL2 rownum by dfBestOutGroupL1
 dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% dfBestOutGroupL1$rownum, ]
@@ -347,35 +430,43 @@ dfBestOutGroupL2 <- by(dfBestOutGroupL2, dfBestOutGroupL2["ind"], head, n=1)
 dfBestOutGroupL2 <- Reduce(rbind, dfBestOutGroupL2)
 dfBestOutGroupL2 <- dfBestOutGroupL2[order(dfBestOutGroupL2$rownum),] 
 
-#this will give the correct indexNo for the rownum column, doing this for both L1 and L2
+#this will give the correct index value for the rownum column, doing this for both L1 and L2
 j=0:(nrow(dfBestOutGroupL1)-1)
 dfBestOutGroupL1$indexNo <- (dfBestOutGroupL1$rownum / (nrow(dfAllSeq))-j) * (nrow(dfAllSeq))
-#then ordering by this indexNo, this is important for merging to the MatchOverall best dataframe
-dfBestOutGroupL1<- dfBestOutGroupL1[order(dfBestOutGroupL1$indexNo),]
+#for merging, need to change ind column in dfAllSeq to numeric first
+indNum <- with(dfAllSeq, as.numeric(as.character(ind)))
+dfAllSeq$ind <- indNum
+#using data.tables and setting keys for the merge
+dfAllSeq <- data.table(dfAllSeq)
+dfBestOutGroupL1 <- data.table(dfBestOutGroupL1)
+setkey(dfBestOutGroupL1,indexNo)
+setkey(dfAllSeq,ind)
 dfBestOutGroupL1 <- merge(dfBestOutGroupL1, dfAllSeq, by.x = "indexNo", by.y = "ind", all.x = TRUE)
+#Converting back to dataframe for more further use
+dfBestOutGroupL1 <- as.data.frame(dfBestOutGroupL1)
+dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,3],dfMatchOverallLineage1[,26])),]
+
 #L2
 j=0:(nrow(dfBestOutGroupL2)-1)
 dfBestOutGroupL2$indexNo <- (dfBestOutGroupL2$rownum / (nrow(dfAllSeq))-j) * (nrow(dfAllSeq))
-dfBestOutGroupL2<- dfBestOutGroupL2[order(dfBestOutGroupL2$indexNo),]
-dfBestOutGroupL2 <- merge(dfBestOutGroupL2, dfAllSeq, by.x = "indexNo", by.y = "ind", all.x = TRUE) 
+dfBestOutGroupL2 <- data.table(dfBestOutGroupL2)
+setkey(dfBestOutGroupL2,indexNo)
+dfBestOutGroupL2 <- merge(dfBestOutGroupL2, dfAllSeq, by.x = "indexNo", by.y = "ind", all.x = TRUE)
+dfBestOutGroupL2 <- as.data.frame(dfBestOutGroupL2)
+dfBestOutGroupL2 <- dfBestOutGroupL2[order(match(dfBestOutGroupL2[,3],dfMatchOverallLineage2[,26])),]
 
-#Can rename certain columns to more closely resemble dfMatchOverallLineage dataframes except the outgroupdist column which would be unique of course
-dfBestOutGroupL1 <- dfBestOutGroupL1[,c("bin_uri","record_id","values","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLon","indexNo")]
+#Can rename certain columns to more closely resemble dfMatchOverallLineage dataframes (except the outGroupDist column which would be unique to each lineage of course)
+dfBestOutGroupL1 <- dfBestOutGroupL1[,c("bin_uri","record_id","values","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLon","indexNo","ind")]
 colnames(dfBestOutGroupL1)[3] <- "outGroupDist"
-dfBestOutGroupL2 <- dfBestOutGroupL2[,c("bin_uri","record_id","values","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLon","indexNo")]
+dfBestOutGroupL2 <- dfBestOutGroupL2[,c("bin_uri","record_id","values","medianLat","latMin","latMax","binSize","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLon","indexNo","ind")]
 colnames(dfBestOutGroupL2)[3] <- "outGroupDist"
 
-#Ordering values by order of values in minoutgroup dataframe to ensure we have the correct order
-dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,3],dfMinOutGroupL1[,1])),]
-#Then ordering outgroups for lineage 2 by ordering of lineage 1
-dfBestOutGroupL2 <- dfBestOutGroupL2[order(match(dfBestOutGroupL2[,1],dfBestOutGroupL1[,1])),]
-
-#adding an ingroup pairing column to each bestoutgroup dataframe
+#adding an ingroup pairing column to each bestoutgroup dataframes
 dfBestOutGroupL1$inGroupPairing <- dfMatchOverallLineage1$inGroupPairing
 dfBestOutGroupL2$inGroupPairing <- dfMatchOverallLineage2$inGroupPairing
 
-#Can now merge are outgroups to are associated lineages
-#Each outgroup will be duplicated for each member of the pairing however the distances should be unqiue to represent each lineage
+#Can now merge our outgroups to our associated lineages
+#Each outgroup will be duplicated for each member of the pairing however the distances should be unique to represent each distance from each outgroup to each lineage
 
 #.x beside headings are the ingroup data (except unique columns), scroll far enough to the right and headings with .y are the outgroup related columns
 dfMatchOverallLineage1 <- merge(dfMatchOverallLineage1, dfBestOutGroupL1, by.x = "inGroupPairing", by.y = "inGroupPairing")
@@ -392,21 +483,23 @@ noOutGroup<-which(is.na(dfMatchOverallBest$bin_uri.y))
 if(length(noOutGroup) >0){
   dfMatchOverallBest<-dfMatchOverallBest[-noOutGroup,]}
 
+#Also renumber pairings starting from 1 again
+dfMatchOverallBest$inGroupPairing <- rep(1:(nrow(dfMatchOverallBest)/2), each = 2)
+
 ################
 #Ouput to CSV or TSV
 
-#Should output the directory you have set in Rstudio
+#first create this dataframe for dfMatchOverallBest, this will allow output of this dataframe
+#dfMatchOverallBestOut <- data.frame(lapply(dfMatchOverallBest, as.character), stringsAsFactors=FALSE)
 
-#Defining another variable to give a unique name to the CSV
+#Defining another variable to give a unique name to the CSV or TSV
 #Name would be what you specify it to be, R will prompt you to insert a name for the file in the console:
 #filename <- readline(prompt="")
 
-#Once you have a name, uncomment one the of the write table commands and run that command to get a file output
-
 #CSV
-#write.table(dfMatchOverallBest, file=paste(filename, ".csv", sep=""), quote=FALSE, sep=',', col.names = NA)
+#write.table(dfMatchOverallBestOut, file=paste(filename, ".csv", sep=""), quote=FALSE, sep=',', col.names = NA)
 
 #TSV
-#write.table(dfMatchOverallBest, file=paste(filename, ".tsv", sep=""), quote=FALSE, sep='\t', col.names = NA)
+#write.table(dfMatchOverallBestOut, file=paste(filename, ".tsv", sep=""), quote=FALSE, sep='\t', col.names = NA)
 
 ################
