@@ -486,6 +486,60 @@ if(length(noOutGroup) >0){
 #Also renumber pairings starting from 1 again
 dfMatchOverallBest$inGroupPairing <- rep(1:(nrow(dfMatchOverallBest)/2), each = 2)
 
+#refer to line 212 for the dataframe containing distances(outgroupDist)
+#create variables that hold outgroup distances
+testOutGroupDist<-as.numeric(dfMatchOverallBest$outGroupDist) #stored as a vector
+testOutGroupDistB<-testOutGroupDist #stored testOutGroupDist in another variable for binomial testing
+#need to covert to numeric, wilcoxon test requires it
+#set trueTestOutGroupDist to null to ensure empty variable
+trueTestOutGroupDist<-NULL
+#counter for trueTestOutGroupDist
+x=1
+#for loop that increments by 2 to divide adjacent outgroup distances found in outGroupDist
+for (i in seq(from=1, to=length(testOutGroupDist), by = 2)){
+  if (testOutGroupDist[i] > testOutGroupDist[i+1]){
+    trueTestOutGroupDist[x]<-testOutGroupDist[i]/testOutGroupDist[i+1]
+  }
+  else if (testOutGroupDist[i+1] > testOutGroupDist[i]){
+    trueTestOutGroupDist[x]= testOutGroupDist[i+1]/testOutGroupDist[i]
+  }
+  x<-x+1
+}
+
+#for loop that increments by to divide adjacent outgroup distances found in outGroupDist, assigns negative value
+#to higher latitude range lineage that has a higher genetic distance to the outgroup
+trueTestOutGroupDistB<-NULL
+y=1
+for (i in seq(from=1, to=length(testOutGroupDistB), by = 2)){
+  if (testOutGroupDistB[i] > testOutGroupDistB[i+1]){
+    trueTestOutGroupDistB[y]<-testOutGroupDistB[i]/testOutGroupDistB[i+1]
+  }
+  else if (testOutGroupDistB[i+1] > testOutGroupDistB[i]){
+    trueTestOutGroupDistB[y]= testOutGroupDistB[i+1]/testOutGroupDistB[i]
+  }
+  y<-y+1
+}
+
+posCount=0
+for (j in seq(from=1, to=length(trueTestOutGroupDistB), by = 1)){
+  if (trueTestOutGroupDist[j] > 0){
+    posCount<-posCount+1
+  }
+}
+
+#binomial test on relative branch lengths for sister pairs
+btestOutgroup(posCount, trueTestOutGroupDistB, p= 0.5)
+
+#wilcoxon test on relative branch lengths for sister pairs
+#possible error message for this dataset, cannot computer exact p-value with ties due to multiple same values in variable but still seems to work??
+wTestOutgroup<-wilcox.test(trueTestOutGroupDist, mu=0)
+
+#plot wilcoxon test results
+#do i plot the wilcoxon test results or do i plot the values that the test is run with?
+#for now, i just plotted the values that are put into the wilcoxon test in a histogram
+hist(btestOutGroup)
+hist(trueTestOutGroupDist) 
+
 ################
 #Ouput to CSV or TSV
 
