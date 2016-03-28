@@ -5,6 +5,7 @@
 #This program will allow for the generation of latitudinally separated sister pairings and associated outgroupings from ANY taxa (provided they have a suitable reference sequence) and geographical region found on BOLD in one streamlined R pipeline!
 #In this new and improved iteration, data is translated directly from a BOLD tsv file of the users choosing to a dataframe in R
 #The generated sister pairs and outgroups can then be written to a csv or tsv and the file will appear in the current working directory of R
+#Additionally, binomial and Wilcoxon tests can be performed on the relative outgroup distances of the generated pairings 
 
 ##################
 #A few important tips:
@@ -34,14 +35,15 @@
 #dfGeneticDistanceStack is dfGeneticDistance with all columns concatenated into one long column, it is used to grab index numbers for each pairing
 #dfDistancePair represents pairwise distances between lineages in the final pairings only, it used to determine if pseduoreplication is present in some pairings
 #dfConsensus and dfNonconsensus are dataframes with the consensus and nonconcensus sequences respectively but is also similar to dfLatLon in the data it contains
+#dfRelativeDist shows the relative distances to the outgroup for each pairing
 
 #################
 #Packages required
 
-#For this we also need the foreach package for a few functions
+#We need the foreach package for several functions that require iteration over dataframe rows
 install.packages("foreach")
 library(foreach)
-#For genetic distance, we use the ape package
+#For genetic distance determination using the TN93 model, we use the ape package
 install.packages("ape")
 library(ape)
 #Speeds up parsing of the tsv file with read_tsv function
@@ -59,6 +61,8 @@ library(DescTools)
 #Also adding data tables for table merging
 install.packages("data.table")
 library(data.table)
+#For plotting of relative outgroup distances between lineages we will also need ggplot2
+require(ggplot2)
 
 #################
 #R Commands:
@@ -66,9 +70,9 @@ library(data.table)
 #TSV Parsing
 
 #First we download the TSV and convert it into a dataframe, this URL is what is modified by the user and will determine the taxa, geographic region etc.
-dfInitial <- read_tsv("http://www.boldsystems.org/index.php/API_Public/combined?taxon=Sphingidae&geo=all&format=tsv")
+dfInitial <- read_tsv("http://www.boldsystems.org/index.php/API_Public/combined?taxon=Porifera&geo=all&format=tsv")
 
-#If you want to run pre downloaded BOLD tsv's, this will let you choose a path to that tsv and parse
+#If you want to run pre downloaded BOLD tsv's to avoid downloading of the same tsv multiple times, this will let you choose a path to that tsv and parse
 #tsvParseDoc <- file.choose()
 #dfInitial <- read_tsv(tsvParseDoc)
 
@@ -79,9 +83,9 @@ dfInitial <- read_tsv("http://www.boldsystems.org/index.php/API_Public/combined?
 dfInitial <- (dfInitial[,c("recordID","bin_uri","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","lat","lon","nucleotides")])
 colnames(dfInitial)[1] <- "record_id"
 
-#Removing sequences with no latitude/longitude values, filtering according to lat since we only really need lat but lon could be useful for map plotting
-containLatLon <- grep( "[0-9]", dfInitial$lat)
-dfInitial<-dfInitial[containLatLon,]
+#Removing sequences with no latitude values, filtering according to lat since we only really need lat for the analysis
+containLat <- grep( "[0-9]", dfInitial$lat)
+dfInitial<-dfInitial[containLat,]
 
 #Next we have to convert lat column to num instead of chr type, this will become important later on for median latitude determination
 latNum <- with(dfInitial, as.numeric(as.character(lat))) 
@@ -212,7 +216,7 @@ matrixLatitudeDistance <- as.matrix( dist(dfAllSeq$medianLat) )
 dfLatitudeDistance <-as.data.frame(matrixLatitudeDistance)
 
 #############
-#Multiple Sequence Alignment of All Sequences, Sequence Trimming according to a Reference Sequence and Pairwise Distance determination with TN93
+#Multiple Sequence Alignment of All Sequences and Pairwise Distance determination with TN93
 
 #Lets first start off by identifying our reference sequence
 #we can make a smaller dataframe with the name of the taxa as one column and the sequence as another column
@@ -229,7 +233,7 @@ dnaStringSet2 <- DNAStringSet(alignmentSequences)
 #This could take several minutes to even hours in some cases depending on the taxa
 alignment2 <- msa(dnaStringSet2)
 
-#Conversion to DNAbin format before genetic distance computation matrix
+#Conversion to DNAbin format before genetic distance matrix
 DNAbin <- as.DNAbin(alignment2)
 
 #Now for the computation of genetic distance, several models can be used - "raw", "N", "TS", "TV", "JC69", "K80" (the default), "F81", "K81", "F84", "BH87", "T92", "TN93", "GG95", "logdet"
@@ -245,7 +249,7 @@ dfGeneticDistanceStack <-stack(dfGeneticDistance)
 #Finding appropriate pairings according to latitude and distance criteria
 
 #So now we have two dataframes, we can find ideal matchings based on less than 15% divergence and 20 degrees latitude separation
-#These values can easily be edited to add more or less stringency to the program
+#These values can easily be edited to add more or less stringency to the matches
 #Will produce lists with indexes of each match according to our set criteria
 geneticDistanceMatchI <- which(dfGeneticDistance<=0.15)
 latitudeDistanceMatch <- which(dfLatitudeDistance>=20)
@@ -339,7 +343,7 @@ if(length(overlapInd)>0){
 ###############
 #Identifying and Averaging PseudoReplicates
 
-#To check for the phylogenetics problem of pseudoreplication we can generate another smaller distance matrix with our selected pairings only
+#To check for the phylogenetics problem of pseduoreplication we can generate another smaller distance matrix with our selected pairings only
 #If a bin from one pairing is actually closer to a bin from another pairing (as opposed to its paired lineage) than we would have to average the results of those two pairings
 
 #First lets order our lineage according to distance (makes things easier to understand and ensure we have the right ordering)
@@ -406,20 +410,7 @@ dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% outGroupCandid
 dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$rownum %in% dfBestOutGroupL2$rownum, ]
 dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% dfBestOutGroupL1$rownum, ]
 
-#Then we break this dataframe down by index into a list
-bestOutGroupListL1 <- lapply(unique(dfBestOutGroupL1$ind), function(x) dfBestOutGroupL1[dfBestOutGroupL1$ind == x,])
-#We then find the value closest to the 1.3 divergence value
-minOutGroupL1 <- sapply( bestOutGroupListL1 , function(x) min( x$values ) )
-#make into a dataframe
-dfMinOutGroupL1 <- as.data.frame(minOutGroupL1)
-#Again subset to dfBestOutGroup to get indices of the closest outgrouping values
-dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$values %in% dfMinOutGroupL1$minOutGroupL1,]
-
-#For L2 its a bit different since we are choosing outgroups which would be shared between both lineages
-#we simply subset dfBestOutGroupL2 rownum by dfBestOutGroupL1
-dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% dfBestOutGroupL1$rownum, ]
-
-#Its possible to have more than one ideal outgrouping per pairing, so restricting to one outgrouping per pairing by setting head, n=1
+#Its possible to have more than one outgrouping per pairing that meets the divergence criteria, so restricting to one outgrouping per pairing by setting head, n=1
 #Once again doing this for both L1 and L2
 dfBestOutGroupL1 <- by(dfBestOutGroupL1, dfBestOutGroupL1["ind"], head, n=1)
 dfBestOutGroupL1 <- Reduce(rbind, dfBestOutGroupL1)
@@ -442,7 +433,7 @@ dfBestOutGroupL1 <- data.table(dfBestOutGroupL1)
 setkey(dfBestOutGroupL1,indexNo)
 setkey(dfAllSeq,ind)
 dfBestOutGroupL1 <- merge(dfBestOutGroupL1, dfAllSeq, by.x = "indexNo", by.y = "ind", all.x = TRUE)
-#Converting back to dataframe for more further use
+#Converting back to dataframe for further use
 dfBestOutGroupL1 <- as.data.frame(dfBestOutGroupL1)
 dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,3],dfMatchOverallLineage1[,26])),]
 
@@ -468,7 +459,7 @@ dfBestOutGroupL2$inGroupPairing <- dfMatchOverallLineage2$inGroupPairing
 #Can now merge our outgroups to our associated lineages
 #Each outgroup will be duplicated for each member of the pairing however the distances should be unique to represent each distance from each outgroup to each lineage
 
-#.x beside headings are the ingroup data (except unique columns), scroll far enough to the right and headings with .y are the outgroup related columns
+#.x beside headings are the ingroup pairing data (except unique columns), scroll far enough to the right and headings with .y are the outgroup related columns
 dfMatchOverallLineage1 <- merge(dfMatchOverallLineage1, dfBestOutGroupL1, by.x = "inGroupPairing", by.y = "inGroupPairing")
 dfMatchOverallLineage2 <- merge(dfMatchOverallLineage2, dfBestOutGroupL2, by.x = "inGroupPairing", by.y = "inGroupPairing")
 
@@ -485,70 +476,22 @@ if(length(noOutGroup) >0){
 
 #Also renumber pairings starting from 1 again
 dfMatchOverallBest$inGroupPairing <- rep(1:(nrow(dfMatchOverallBest)/2), each = 2)
-
-#refer to line 212 for the dataframe containing distances(outgroupDist)
-#create variables that hold outgroup distances
-testOutGroupDist<-as.numeric(dfMatchOverallBest$outGroupDist) #stored as a vector
-testOutGroupDistB<-testOutGroupDist #stored testOutGroupDist in another variable for binomial testing
-#need to covert to numeric, wilcoxon test requires it
-#set trueTestOutGroupDist to null to ensure empty variable
-trueTestOutGroupDist<-NULL
-#counter for trueTestOutGroupDist
-x=1
-#for loop that increments by 2 to divide adjacent outgroup distances found in outGroupDist
-for (i in seq(from=1, to=length(testOutGroupDist), by = 2)){
-  if (testOutGroupDist[i] > testOutGroupDist[i+1]){
-    trueTestOutGroupDist[x]<-testOutGroupDist[i]/testOutGroupDist[i+1]
-  }
-  else if (testOutGroupDist[i+1] > testOutGroupDist[i]){
-    trueTestOutGroupDist[x]= testOutGroupDist[i+1]/testOutGroupDist[i]
-  }
-  x<-x+1
-}
-
-#for loop that increments by to divide adjacent outgroup distances found in outGroupDist, assigns negative value
-#to higher latitude range lineage that has a higher genetic distance to the outgroup
-trueTestOutGroupDistB<-NULL
-y=1
-for (i in seq(from=1, to=length(testOutGroupDistB), by = 2)){
-  if (testOutGroupDistB[i] > testOutGroupDistB[i+1]){
-    trueTestOutGroupDistB[y]<-testOutGroupDistB[i]/testOutGroupDistB[i+1]
-  }
-  else if (testOutGroupDistB[i+1] > testOutGroupDistB[i]){
-    trueTestOutGroupDistB[y]= testOutGroupDistB[i+1]/testOutGroupDistB[i]
-  }
-  y<-y+1
-}
-
-posCount=0
-for (j in seq(from=1, to=length(trueTestOutGroupDistB), by = 1)){
-  if (trueTestOutGroupDist[j] > 0){
-    posCount<-posCount+1
-  }
-}
-
-#binomial test on relative branch lengths for sister pairs
-btestOutgroup(posCount, trueTestOutGroupDistB, p= 0.5)
-
-#wilcoxon test on relative branch lengths for sister pairs
-#possible error message for this dataset, cannot computer exact p-value with ties due to multiple same values in variable but still seems to work??
-wTestOutgroup<-wilcox.test(trueTestOutGroupDist, mu=0)
-
-#plot wilcoxon test results
-#do i plot the wilcoxon test results or do i plot the values that the test is run with?
-#for now, i just plotted the values that are put into the wilcoxon test in a histogram
-hist(btestOutGroup)
-hist(trueTestOutGroupDist) 
+dfMatchOverallLineage1$inGroupPairing <- 1:nrow(dfMatchOverallLineage1)
+dfMatchOverallLineage2$inGroupPairing <- 1:nrow(dfMatchOverallLineage2)
 
 ################
 #Ouput to CSV or TSV
 
-#first create this dataframe for dfMatchOverallBest, this will allow output of this dataframe
+#The user can output the pairing results to CSV/TSV if they wish
+
+#First create this dataframe for dfMatchOverallBest, this will allow output of this file
 #dfMatchOverallBestOut <- data.frame(lapply(dfMatchOverallBest, as.character), stringsAsFactors=FALSE)
 
-#Defining another variable to give a unique name to the CSV or TSV
+#Defining another variable to give a unique name to the CSV
 #Name would be what you specify it to be, R will prompt you to insert a name for the file in the console:
 #filename <- readline(prompt="")
+
+#Then you can uncomment one of these write.table commands to output
 
 #CSV
 #write.table(dfMatchOverallBestOut, file=paste(filename, ".csv", sep=""), quote=FALSE, sep=',', col.names = NA)
@@ -557,3 +500,108 @@ hist(trueTestOutGroupDist)
 #write.table(dfMatchOverallBestOut, file=paste(filename, ".tsv", sep=""), quote=FALSE, sep='\t', col.names = NA)
 
 ################
+#Statistical Analysis of Pairings
+
+#Binomial Test
+
+#Peforming a binomial test on our pairings to test to see if pairings with lower latitude AND greater outgroup distance are more prevalent than the null expectation of 50% 
+#Null expectation being that pairings with high lat/high outgroup dist are equally prevalent compared with low lat/high outgroup dist pairings
+
+#Refer to line 212 for the dataframe containing distances(outgroupDist)
+#create variables that hold outgroup distances
+testOutGroupDist<-as.numeric(dfMatchOverallBest$outGroupDist) #stored as a vector
+#set trueTestOutGroupDist to null to ensure empty variable
+trueTestOutGroupDist<-NULL
+#counter for trueTestOutGroupDist
+x=1
+#for loop that increments by 2 to divide adjacent outgroup distances found in outGroupDist
+#This will give our relative genetic distances in the vector testOutGroupDist
+for (i in seq(from=1, to=length(testOutGroupDist), by = 2)){
+  if (testOutGroupDist[i] > testOutGroupDist[i+1]){
+    trueTestOutGroupDist[x]<-testOutGroupDist[i]/testOutGroupDist[i+1]
+  }
+  else if (testOutGroupDist[i+1] > testOutGroupDist[i]){
+    trueTestOutGroupDist[x]= testOutGroupDist[i+1]/testOutGroupDist[i]
+  }
+  else if (testOutGroupDist[i+1] == testOutGroupDist[i]){
+    trueTestOutGroupDist[x]= testOutGroupDist[i+1]/testOutGroupDist[i]
+  }
+  x<-x+1
+}
+
+#Checking to see which latitudes are lower for lineage 1 compared to lineage2
+lowerLatL1 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% which(dfMatchOverallLineage1$medianLat.x[l]<dfMatchOverallLineage2$medianLat.x[l]) 
+#Checking to see which genetic distances are greater for lineage 1 compared to lineage2
+greaterDistanceL1 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% which(dfMatchOverallLineage1$outGroupDist[l]>dfMatchOverallLineage2$outGroupDist[l])
+#Then an integer of 1 will be assigned to those in Lineage1 that meet those criteria, meeting these criteria is defined as a success
+successValL1 <- mapply(intersect,lowerLatL1,greaterDistanceL1)
+#This will give the index of each pairing relative to Lineage 1 that met those criteria
+successValL1 <- which(successValL1>0) 
+
+#Do the same process for lineage 2 compared to lineage1
+lowerLatL2 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% which(dfMatchOverallLineage2$medianLat.x[l]<dfMatchOverallLineage1$medianLat.x[l]) 
+greaterDistanceL2 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% which(dfMatchOverallLineage2$outGroupDist[l]>dfMatchOverallLineage1$outGroupDist[l])
+successValL2 <- mapply(intersect,lowerLatL2,greaterDistanceL2)
+successValL2 <- which(successValL2>0) 
+
+#Append both success lists together
+successOverall <- append(successValL1, successValL2)
+#Sort the list
+successOverall <- sort(successOverall)
+
+#Also making a failure vector for pairings that were not successes
+failureOverall <- dfMatchOverallLineage1$inGroupPairing[-successOverall]
+
+#Can then subset our trueTestOutGroupDist vector containing relative distances with our successess
+relativeDistPos <- trueTestOutGroupDist[successOverall]
+#Then subset based on which relative distances were not successes
+relativeDistNeg <- trueTestOutGroupDist[-successOverall]
+#These values will also be assigned a negative value
+relativeDistNeg <- relativeDistNeg * -1
+
+#Binomial test on relative branch lengths for sister pairs
+#Number of successes defined as length of our relativeDistPos vector, total number of trials is sum of lengths of relativeDistPos and relativeDistNeg
+#Null expectation set to 50%
+binomialTestOutGroup <- binom.test(length(relativeDistPos), (length(relativeDistPos) + length(relativeDistNeg)), p= 0.5)
+
+#Wilcoxon Test
+
+#Next we do a Wilcoxon test on all of the signed relative distances (pos or neg) to compare the median for a significant difference from the null expectation of zero.
+#This test will consider both the magnitude and direction but is also non-parametric
+
+#First we just have to append our relativeDistNeg to our relativeDistPos first to get all of the distances
+relativeDistOverall <- append(relativeDistNeg, relativeDistPos)
+
+#Then we can perform the wilcox test
+wilcoxTestOutgroup<-wilcox.test(relativeDistOverall, mu=0)
+
+###############
+#Plotting of Results
+
+#Plot of Relative Outgroup Distances
+
+#Plotting of our relative distances based on pairing number
+#Will plot red if the value is below 0 (meaning not a success) and blue if above 0 (success!)
+
+#First identifying which pairing was positive and which was negative
+names(relativeDistPos) <- paste0(successOverall)
+names(relativeDistNeg) <- paste0(failureOverall)
+#Creating a new named vector with pos and negative values appended together but with pairing numbers as names 
+relativeDistOverall2 <- append(relativeDistNeg, relativeDistPos)
+#Adding this vector to a dataframe
+dfRelativeDist <- as.data.frame(relativeDistOverall2)
+#Adding rownames variable column
+dfRelativeDist$variable <- rownames(dfRelativeDist)
+#Order by this column
+dfRelativeDist <- dfRelativeDist[order(dfRelativeDist$variable),]
+#Adding relative distances to a new column called value
+colnames(dfRelativeDist)[1] <- "value"
+#Creating another value called sign to determine which is positive and which is negative
+dfRelativeDist[["sign"]] = ifelse(dfRelativeDist[["value"]] >= 0, "positive", "negative")
+#Make the variable column a factor so ggplot orders pairings correctly
+dfRelativeDist$variable <- factor(dfRelativeDist$variable, levels = dfRelativeDist$variable)
+
+#Our actual plot using ggplot
+ggplot(dfRelativeDist, aes(x = variable, y = value, fill = sign)) + geom_bar(stat="identity") + 
+  scale_fill_manual(values = c("positive" = "blue", "negative" = "red")) + ggtitle("Relative Outgroup Distances for Each Latitude Separated Pairing") +
+  labs(x="Pairing Number",y="Relative Distance") 
