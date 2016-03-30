@@ -144,6 +144,7 @@ dfLatLon$binSize <- c(binSize)
 dfLatLon$medianLat <- dfLatLon$medianLat + 90
 dfLatLon$latMax <- dfLatLon$latMax + 90
 dfLatLon$latMin <- dfLatLon$latMin + 90
+dfLatLon$medianLon <- dfLatLon$latMin + 90
 
 #Merging LatLon to BinList for the sequence alignment step
 dfBinList <- merge(dfBinList, dfLatLon, by.x = "bin_uri", by.y = "bin_uri")
