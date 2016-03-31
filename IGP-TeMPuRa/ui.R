@@ -29,15 +29,20 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
   collapsible = "true",
   tabPanel("Tool",
     h1("Instructions"),
-    p("Placeholder"),
+    p("The left sidebar panel contains the inputs that the user can enter into the pipeline
+      to fit for their analysis. The taxonomy group must already exist on the BOLD database. On the right side of the side panel is the map that will 
+      show the markers of where the species is located in the world. Below the map will show
+      the results in table format and the statistical analysis of the data. The top of the page
+      links to more pages that has more information about this project, about the genetic 
+      distance models used in R, and about us."),
     sidebarLayout(
       sidebarPanel(
         textInput("taxonomy", label = h4("Enter taxonomy group:"), value = "Porifera"),
         textInput("geography", label = h4("Enter geographical location:"), value = "all"),
         sliderInput("latitude", label = h4("Latitude difference"), min = 10, max = 30, value = 20),
-        sliderInput("genetic", label = h4("Genetic similarity threshold"), min = 10, max = 20, value = 15),
+        sliderInput("genetic", label = h4("Genetic similarity threshold"), min = 0.10, max = 0.20, value = 0.15),
         sliderInput("outgroups", label = h4("Select a distance from the outgroup"), min = 1, max = 2, value = 1.3, step = 0.1),
-        selectInput("distanceModels", label = h4("Select a genetic distance model"), geneticDistanceModel, selected = "K80"),
+        selectInput("distanceModels", label = h4("Select a genetic distance model"), geneticDistanceModel, selected = "TN93"),
         submitButton("Submit"),
         br(),
         downloadButton("download", label = "Download CSV")
@@ -45,9 +50,9 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
       mainPanel(
         leafletOutput("worldmap"),
         br(),
-        div(style='height:300px; width:850px; overflow:scroll',
-            DT::dataTableOutput("url", width = 850)),
-        textOutput("text")
+        div(style='height:600px; width:850px; overflow:scroll',
+            DT::dataTableOutput("url", width = 850))
+        #plotOutput("distPlot")
       )
     )
   ),
@@ -73,8 +78,22 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
     tabPanel("More Information",
       h1("Description of this Tool"),
       p("TeMPuЯa is an R pipeline that can effectively perform phylogenetic comparisons on 
-      large numbers of species based on latitude and genetic similarity. This page accepts
-      input from the user in order to perform the comparisons.")       
+      large numbers of species based on latitude and genetic similarity. This website accepts
+      input from the user in order to perform the comparisons."),
+      h1("Purpose"),
+      p("To develop a method to organize populations by tropical and temperate environments
+        in order to analyze the effect of differential rate of evolution by nucleotide
+        substitution due to geographical distances for indicators in the environment or
+        disease transmitters."),
+      h1("Scope"),
+      p("The scope of this project is to design and construct an analytical software tool for
+        Dr. Sarah Adamowicz in the Centre for Biodiversity Genomics at the University
+        of Guelph. This tool will accept the species and criteria from the user, obtain
+        the required information from the Barcode of Life Data Systems (BOLD), screen
+        the species according to the quality of the sequence of the genetic marker, GPS
+        coordinates and the genetic distance, and output both the pairs of sister lineages
+        and outgroup sequences in CSV format suitable for follow-on analysis in the
+        software PAML. All of the data are properties of BOLD and the University of Guelph.")
     ),
     tabPanel("About Us",
       h1("Team"),
