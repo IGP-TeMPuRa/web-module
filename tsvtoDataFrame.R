@@ -143,10 +143,11 @@ dfLatLon$latMin <- c(latMin)
 dfLatLon$latMax <- c(latMax)
 dfLatLon$binSize <- c(binSize)
 
-#Can also convert to 180 degree latitude scale
+#Can also convert to 180 degree latitude scale, and longitude too
 dfLatLon$medianLat <- dfLatLon$medianLat + 90
 dfLatLon$latMax <- dfLatLon$latMax + 90
 dfLatLon$latMin <- dfLatLon$latMin + 90
+dfLatLon$medianLon <- dfLatLon$medianLon + 90
 
 #Merging LatLon to BinList for the sequence alignment step
 dfBinList <- merge(dfBinList, dfLatLon, by.x = "bin_uri", by.y = "bin_uri")
