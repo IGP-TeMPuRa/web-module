@@ -143,7 +143,7 @@ dfLatLon$latMin <- c(latMin)
 dfLatLon$latMax <- c(latMax)
 dfLatLon$binSize <- c(binSize)
 
-#Can also convert to 180 degree latitude scale, convert longitude as well
+#Can also convert to 180 degree latitude scale
 dfLatLon$medianLat <- dfLatLon$medianLat + 90
 dfLatLon$latMax <- dfLatLon$latMax + 90
 dfLatLon$latMin <- dfLatLon$latMin + 90
@@ -573,7 +573,7 @@ dfMatchOverallLineage2$inGroupPairing <- 1:nrow(dfMatchOverallLineage2)
 #write.table(dfMatchOverallBestOut, file=paste(filename, ".tsv", sep=""), quote=FALSE, sep='\t', col.names = NA)
 
 ###############
-#Identifying and Averaging PseudoReplicates
+#Identifying PseudoReplicates
 
 #To check for the phylogenetics problem of pseudoreplication we can generate another smaller distance matrix with our selected pairings only
 #If a bin from one pairing is actually closer to a bin from another pairing (as opposed to its paired lineage) than we would have to average the results of those two pairings in the statistics section
