@@ -44,13 +44,13 @@
 #Packages required
 
 #We need the foreach package for several functions that require iteration over dataframe rows
-install.packages("foreach")
+#install.packages("foreach")
 library(foreach)
 #For genetic distance determination using the TN93 model, we use the ape package
-install.packages("ape")
+#install.packages("ape")
 library(ape)
 #Speeds up parsing of the tsv file with read_tsv function
-install.packages("readr")
+#install.packages("readr")
 library(readr)
 #For sequence alignments we need the biostrings (DNAStringSet function) and msa packages, run each of these commands individually, sometimes it skips the libraries
 source("https://bioconductor.org/biocLite.R")
@@ -59,10 +59,10 @@ library("Biostrings")
 biocLite("msa")
 library("msa")
 #For overlapping latitude regions we need the Desctools package
-install.packages("DescTools")
+#install.packages("DescTools")
 library(DescTools)
 #Also adding data tables for table merging in the outgrouping section
-install.packages("data.table")
+#install.packages("data.table")
 library(data.table)
 #For plotting of relative outgroup distances between lineages we will also need ggplot2
 require(ggplot2)
@@ -147,7 +147,7 @@ dfLatLon$binSize <- c(binSize)
 dfLatLon$medianLat <- dfLatLon$medianLat + 90
 dfLatLon$latMax <- dfLatLon$latMax + 90
 dfLatLon$latMin <- dfLatLon$latMin + 90
-dfLatLon$medianLon <- dfLatLon$medianLon + 90
+dfLatLon$medianLon <- dfLatLon$medianLon + 180
 
 #Merging LatLon to BinList for the sequence alignment step
 dfBinList <- merge(dfBinList, dfLatLon, by.x = "bin_uri", by.y = "bin_uri")
