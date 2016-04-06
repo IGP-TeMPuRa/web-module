@@ -59,10 +59,10 @@ library("Biostrings")
 biocLite("msa")
 library("msa")
 #For overlapping latitude regions we need the Desctools package
-#install.packages("DescTools")
+install.packages("DescTools")
 library(DescTools)
 #Also adding data tables for table merging in the outgrouping section
-#install.packages("data.table")
+install.packages("data.table")
 library(data.table)
 #For plotting of relative outgroup distances between lineages we will also need ggplot2
 require(ggplot2)
