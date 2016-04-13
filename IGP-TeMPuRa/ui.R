@@ -6,6 +6,7 @@ library(foreach)
 library(ape)
 library(data.table)
 library(DT)
+library(nlme)
 
 # Choices for the genetic distance model
 geneticDistanceModel <- c(
@@ -51,8 +52,9 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
         leafletOutput("worldmap"),
         br(),
         div(style='height:600px; width:850px; overflow:scroll',
-            DT::dataTableOutput("url", width = 850))
-        #plotOutput("distPlot")
+            DT::dataTableOutput("url", width = 850)),
+        br(),
+        plotOutput("distPlot")
       )
     )
   ),
@@ -95,14 +97,21 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
         and outgroup sequences in CSV format suitable for follow-on analysis in the
         software PAML. All of the data are properties of BOLD and the University of Guelph.")
     ),
+      h3("Link to the source code"),
+      a("Github", href="https://github.com/IGP-TeMPuRa/web-module", target="_blank"),
     tabPanel("About Us",
       h1("Team"),
-      h3("Winfield Ly"),
-      p("Stuff about you"),
-      h3("Matthew Orton"),
-      p("Stuff about you"),
-      h3("David Lee"),
-      p("Stuff about you")
+      h3("Winfield Ly, Matthew Orton, and David Lee"),
+      p("We are a group of budding bioinformaticians/programmers who are classmates in the 
+        Bioinformatics Graduate Certificate Program at Seneca College in 2015-2016 to learn 
+        and develop our programming skills in Perl, Java, and R. We are fast learners, and 
+        work well in a team with excellent communication skills."),
+      h3("Special Thanks"),
+      p("We would like to thank Keshav Dial and Bilal Athar during the initial stages of this 
+        project. We would also like to thank our PI, Dr. Sarah Adamowicz, for giving us this
+        opportunity to collaborate between schools during the school year. Finally, we would
+        like to thank Dan Fieldhouse, Program Coordinator of the Bioinformatics 
+        Graduate Certificate Program at Seneca College.")
     )
   )
 ))
