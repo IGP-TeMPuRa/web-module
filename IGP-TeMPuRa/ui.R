@@ -61,7 +61,7 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
   ),
   tabPanel("Genetic Distance Models Info",
     h1("Genetic distance models:"),
-    a("Link to more explanation for the distance models used in R", href = "http://svitsrv25.epfl.ch/R-doc/library/ape/html/dist.dna.html"),
+    a("Link to more explanation for the distance models used in R", href = "http://svitsrv25.epfl.ch/R-doc/library/ape/html/dist.dna.html", target='_blank'),
     br(),
     p(strong("raw:") ,"This is simply the proportion or the number of sites that differ between each pair of sequences. This may be useful to draw 'saturation plots'."),
     p(strong("JC69:") ,"This model was developed by Jukes and Cantor (1969)."),
@@ -83,7 +83,8 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
       p("TeMPuЯa is an R pipeline that can effectively perform phylogenetic comparisons on 
       large numbers of species based on latitude and genetic similarity. This website accepts
       input from the user in order to perform the comparisons. To look at the source
-        code, please go to our a('Github', href='https://github.com/IGP-TeMPuRa/web-module', target='_blank')"),
+        code, please go to our Github page below."),
+      a('Github', href='https://github.com/IGP-TeMPuRa/web-module', target='_blank'),
       h1("Purpose"),
       p("To develop a method to organize populations by tropical and temperate environments
         in order to analyze the effect of differential rate of evolution by nucleotide
