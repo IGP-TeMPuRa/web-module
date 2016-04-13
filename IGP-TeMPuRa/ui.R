@@ -1,5 +1,6 @@
 # ui.R
 
+#Packaged required
 library(shiny)
 library(leaflet)
 library(foreach)
@@ -81,7 +82,8 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
       h1("Description of this Tool"),
       p("TeMPuЯa is an R pipeline that can effectively perform phylogenetic comparisons on 
       large numbers of species based on latitude and genetic similarity. This website accepts
-      input from the user in order to perform the comparisons."),
+      input from the user in order to perform the comparisons. To look at the source
+        code, please go to our a('Github', href='https://github.com/IGP-TeMPuRa/web-module', target='_blank')"),
       h1("Purpose"),
       p("To develop a method to organize populations by tropical and temperate environments
         in order to analyze the effect of differential rate of evolution by nucleotide
@@ -97,8 +99,6 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
         and outgroup sequences in CSV format suitable for follow-on analysis in the
         software PAML. All of the data are properties of BOLD and the University of Guelph.")
     ),
-      h3("Link to the source code"),
-      a("Github", href="https://github.com/IGP-TeMPuRa/web-module", target="_blank"),
     tabPanel("About Us",
       h1("Team"),
       h3("Winfield Ly, Matthew Orton, and David Lee"),
