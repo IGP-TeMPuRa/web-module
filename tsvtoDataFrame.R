@@ -82,13 +82,13 @@ library("Biostrings")
 biocLite("msa")
 library("msa")
 #For overlapping latitude regions we need the Desctools package
-#install.packages("DescTools")
+install.packages("DescTools")
 library(DescTools)
 #Also adding data tables for table merging in the outgrouping section
-#install.packages("data.table")
+install.packages("data.table")
 library(data.table)
 #For plotting of relative outgroup distances between lineages we will also need ggplot2
-require(ggplot2)
+#require(ggplot2)
 
 #################
 #R Commands:
@@ -131,6 +131,17 @@ dfInitial<-dfInitial[containBin,]
 #Getting rid of any records that dont have sequence data (sometimes there are a few)
 containNucleotides <- grep( "[ACGT]", dfInitial$nucleotides)
 dfInitial<-dfInitial[containNucleotides,]
+
+#Really high dash content will affect the alignment so we can get rid of sequences with greater than 5% dashes
+#This will give the number of positions where an N is found for each sequence
+containDash <- gregexpr( "[-]", dfInitial$nucleotides)
+#We then go through each sequence and see if the number of dashes is greater than 5% of total sequence length 
+#(0.05 can easily modified to add more or less stringency)
+containDash <- foreach(i=1:nrow(dfInitial)) %do% which((containDash[[i]]/nchar(dfInitial$nucleotides[i])>0.01))
+dashcheck <- sapply( containDash , function (x) length( x ) )
+dashcheck <- which(dashcheck>0)
+#Subset out these higher N content sequences
+dfInitial<-dfInitial[-dashcheck,]
 
 #Modifying Bin column slightly to remove "BIN:"
 dfInitial$bin_uri <- substr(dfInitial$bin_uri, 6 , 13)
@@ -181,78 +192,29 @@ dfLatLon$medianLon <- dfLatLon$medianLon + 180
 dfBinList <- merge(dfBinList, dfLatLon, by.x = "bin_uri", by.y = "bin_uri")
 
 ###############
-#Sequence alignments and consensus sequences for each bin with bins larger than 1 member
+#Selecting One Sequence Per Bin
 
-#First we have to subset dfBinList to find bins with more than one member since these bins will need consensus sequences
-largeBin <-which(dfBinList$binSize > 1)
-#If there is at least one bin with more than one member, then a dataframe dfConsensus will be created with those bins
-if(length(largeBin) >0){
-  dfConsensus <- dfBinList[largeBin,]
+#First filtering out any bins with high N content before we pick a bin
+#To avoid using sequences with high N content we can eliminate sequences with greater than 1% total N content
 
-  #Also need to find the number of unique bins in dfConsensus
-  binNumberConsensus <- unique(dfConsensus$bin_uri)
-  binNumberConsensus <- length(binNumberConsensus)
+#This will give the number of positions where an N is found for each sequence
+containN <- gregexpr( "[N]", dfInitial$nucleotides)
+#We then go through each sequence and see if the number of N's is greater than 1% of total sequence length 
+#(0.01 can easily modified to add more or less stringency)
+containN <- foreach(i=1:nrow(dfInitial)) %do% which((containN[[i]]/nchar(dfInitial$nucleotides[i])>0.01))
+ncheck <- sapply( containN , function (x) length( x ) )
+ncheck <- which(ncheck>0)
+#Subset out these higher N content sequences
+dfInitial<-dfInitial[-ncheck,]
 
-  #We also have to create another separate dataframe with bins that only have one member
-  dfNonConsensus <- dfBinList[-largeBin,]
+#Then picking one sequence per bin
+dfInitial <- by(dfInitial, dfInitial["bin_uri"], head, n=1)
+dfInitial <- Reduce(rbind, dfInitial)
 
-  #We then take the dfConsensus sequences and break it down into a list with each element being a unique bin
-  largeBinList <- lapply(unique(dfConsensus$bin_uri), function(x) dfConsensus[dfConsensus$bin_uri == x,])
-  
-  #Convert all of the sequences in this list to dnaStringSet format for the alignment step
-  dnaStringSet1 <- sapply( largeBinList, function(x) DNAStringSet(x$nucleotides) )
-
-  #Multiple sequence alignment using msa package - 3 different algorithms can be used for this: ClustalW, 
-  #ClustalOmega, MUSCLE, using the default of ClustalW for testing
-  #Sequence alignment package can be found here: http://master.bioconductor.org/packages/3.2/bioc/vignettes/msa/inst/doc/msa.pdf
-  #Using the default parameters of the msa package (ClustalW)
-  #Run a multiple sequence alignment on each element of the dnaStringSet1 list, can achieve this with the foreach package
-  alignment1 <- foreach(i=1:binNumberConsensus) %do% msa(dnaStringSet1[[i]])
-  
-  #We can then extract the consensus sequence from each individual alignment
-  consensusSeq <- foreach(i=1:binNumberConsensus) %do% consensusString(alignment1[[i]])
-  
-  #Note that for consensus strings, this nomenclature is used depending on the predominant nucleotide at that position:
-  #AC=M, AG=R, AT=W, CA=M, CG=S, CT=Y,GA=R, GC=S, GT=K, TA=W, TC=Y, TG=K
-  #If the position is unambiguous however than the normal A,C,G,T characters will be used
-  
-  #Adding our consensusSeq to dfConsensus 
-  dfConsensus <- by(dfConsensus, dfConsensus["bin_uri"], head, n=1)
-  dfConsensus <- Reduce(rbind, dfConsensus)
-  dfConsensus$nucleotides <- consensusSeq
-  #Labeling all consensus sequences as such in the record_id since they would not have a specific record_id
-  dfConsensus$record_id <- "consensus sequence"
-  
-  #Append our nonconsensus to our consensus, will make a new dataframe for this - dfAllSeq
-  #now we have all of the sequences we need for the next alignment of all sequences
-  dfAllSeq <-  rbind(dfConsensus, dfNonConsensus)
-  #Can then merge this with dfInitial to get all of the relevant data we need
-  #merging to dfInitial to gain all the relevant taxanomic data
-  #of course consensus sequences will not have any specific taxonomic data besides phylum but will still retain 
-  #their bin_uri for identification
-  dfAllSeq <- merge(dfAllSeq, dfInitial, all.x = TRUE)
-  #Renaming and reorganizing the dataframe
-  dfAllSeq <- (dfAllSeq[,c("bin_uri","binSize","record_id","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLat","latMin","latMax","medianLon")])
-  #Adding an index column to reference later with Matchoverall dataframe
-  dfAllSeq$ind <- row.names(dfAllSeq)
-  #Also giving basic taxonomic information (phylum, class, order, class) to the consensus sequences, 
-  #this may need to be changed depending on the taxa
-  dfAllSeq$phylum_taxID <- dfInitial$phylum_taxID[1]
-  dfAllSeq$phylum_name <- dfInitial$phylum_name[1]
-  dfAllSeq$class_taxID <- dfInitial$class_taxID[1]
-  dfAllSeq$class_name <- dfInitial$class_name[1]
-  dfAllSeq$order_taxID <- dfInitial$order_taxID[1]
-  dfAllSeq$order_name <- dfInitial$order_name[1]
-  dfAllSeq$family_taxID <- dfInitial$family_taxID[1]
-  dfAllSeq$family_name <- dfInitial$family_name[1]
-  
-  } else {
-  #Else if there are no bins with more than one member than we would simply merge latlon with 
-  #intial to get dfAllSeq and thus all of the sequences we want
-  dfAllSeq <- merge(dfLatLon, dfInitial, by.x = "record_id", by.y = "record_id")
-  dfAllSeq <- (dfAllSeq[,c("bin_uri","binSize","record_id","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLat","latMin","latMax","medianLon")])
-  dfAllSeq$ind <- row.names(dfAllSeq)
-}
+#Creation of a new dataframe dfAllSeq with all data needed for the alignment and all further steps
+dfAllSeq <- merge(dfLatLon, dfInitial, by.x = "bin_uri", by.y = "bin_uri", all.Y=TRUE)
+dfAllSeq <- (dfAllSeq[,c("bin_uri","binSize","record_id","phylum_taxID","phylum_name","class_taxID","class_name","order_taxID","order_name","family_taxID","family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name","species_taxID","species_name","nucleotides","medianLat","latMin","latMax","medianLon")])
+dfAllSeq$ind <- row.names(dfAllSeq)
 
 #############
 #Multiple Sequence Alignment of All Sequences with Reference Sequence
@@ -280,10 +242,10 @@ alignmentSequencesPlusRef <- append(alignmentRef, alignmentSequences)
 #Converting all sequences in dfAllSeq plus reference to DNAStringSet format, this is the format required for the alignment
 dnaStringSet2 <- DNAStringSet(alignmentSequencesPlusRef)
 
-#Run a multiple sequence alignment of all sequences both consensus and nonconsensus
-#As mentioned using the default of ClustalW with the msa package
+#Run a multiple sequence alignment of all sequences
+#Using default settings of ClustalOmega of the msa package to speed up the alignment
 #This could take several minutes to even hours in some cases depending on the taxa
-alignment2 <- msa(dnaStringSet2)
+alignment2 <- msaClustalOmega(dnaStringSet2)
 
 ##############
 #Sequence Trimming according to the Reference Sequence
@@ -299,7 +261,9 @@ refSeqPosStart <- regexpr("[ACTG]", refSeqPos)
 refSeqPosStart <- as.numeric(refSeqPosStart)
 
 #Finding last nucleotide position of the reference sequence, the regex may need to be changed depending on the reference sequence
-refSeqPosEnd <- regexpr("[ACTG][-]{40}", refSeqPos)
+#I use the last 20 bp taken from the reference to identify where the sequence ends in the alignment
+last20bp <- substr(dfRefSeq$nucleotides[1], (nchar(dfRefSeq$nucleotides[1])-20), nchar(dfRefSeq$nucleotides[1]))
+refSeqPosEnd <- regexpr(last20bp, refSeqPos)
 refSeqPosEnd <- as.numeric(refSeqPosEnd)
 
 #Then we can substr the alignment by these positions to effectively trim the alignment
@@ -329,23 +293,6 @@ dfAllSeq$nucleotides <- trimmedSeq
 
 #Remnaming dnastringset3 by dfAllSeq index (important later on for dataframe merging)
 dnaStringSet3@ranges@NAMES = dfAllSeq$ind
-
-####################
-#Eliminating High N Content in the Sequences before Genetic Distance Determination
-#To avoid using sequences with high N content we can eliminate sequences with greater than 1% total N content
-#This is done after trimming so most sequences should not have high N content
-
-#This will give the number of positions where an N is found for each sequence
-containN <- gregexpr( "[N]", dfAllSeq$nucleotides)
-#We then go through each sequence and see if the number of N's is greater than 1% of total sequence length 
-#(0.01 can easily modified to add more or less stringency)
-containN <- foreach(i=1:nrow(dfAllSeq)) %do% which((containN[[i]]/nchar(dfAllSeq$nucleotides[i])>0.01))
-ncheck <- sapply( containN , function (x) length( x ) )
-ncheck <- which(ncheck>0)
-#Subset out these higher N content sequences
-dfAllSeq<-dfAllSeq[-ncheck,]
-#Again subsetting dnaStringset3
-dnaStringSet3 <- subset(dnaStringSet3[-ncheck])
 
 ####################
 #Pairwise Distance Determination with TN93
@@ -500,7 +447,7 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,2],dfMatchOve
 outGroupCandidatesL1a <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% which(dfBestOutGroupL1$ind == dfMatchOverallLineage1$indexNo[i])
 #Determining indices with correct outgroup distance, setting a small range between minimum outgroup distance and +0.1 distance 
 #to narrow results, range could be modified if outgroups cannot be found
-outGroupCandidatesL1b <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% which(dfBestOutGroupL1$values >= dfMatchOverallLineage1$inGroupDistx1.3[i] & dfBestOutGroupL1$values < dfMatchOverallLineage1$inGroupDistx1.3[i]+0.1)
+outGroupCandidatesL1b <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% which(dfBestOutGroupL1$values >= dfMatchOverallLineage1$inGroupDistx1.3[i] & dfBestOutGroupL1$values < dfMatchOverallLineage1$inGroupDistx1.3[i]+0.15)
 #Intersection of the two using mapply to find the correct outgroupings for each pairing
 outGroupCandidatesL1c <- mapply(intersect,outGroupCandidatesL1a,outGroupCandidatesL1b)
 #Unlist to make into one vector 
@@ -514,7 +461,7 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$rownum %in% outGroupCandid
 dfBestOutGroupL2 <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %in% dfMatchOverallLineage2$indexNo)
 dfBestOutGroupL2 <- dfBestOutGroupL2[order(match(dfBestOutGroupL2[,2],dfMatchOverallLineage2[,26])),]
 outGroupCandidatesL2a <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% which(dfBestOutGroupL2$ind == dfMatchOverallLineage2$indexNo[i])
-outGroupCandidatesL2b <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% which(dfBestOutGroupL2$values >= dfMatchOverallLineage2$inGroupDistx1.3[i] & dfBestOutGroupL2$values < dfMatchOverallLineage2$inGroupDistx1.3[i]+0.1)
+outGroupCandidatesL2b <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% which(dfBestOutGroupL2$values >= dfMatchOverallLineage2$inGroupDistx1.3[i] & dfBestOutGroupL2$values < dfMatchOverallLineage2$inGroupDistx1.3[i]+0.15)
 outGroupCandidatesL2c <- mapply(intersect,outGroupCandidatesL2a,outGroupCandidatesL2b)
 outGroupCandidatesL2c <- unlist(outGroupCandidatesL2c)
 dfBestOutGroupL2$rownum<-seq.int(nrow(dfBestOutGroupL2))
@@ -628,7 +575,7 @@ dfMatchOverallLineage2$inGroupPairing <- 1:nrow(dfMatchOverallLineage2)
 #write.table(dfMatchOverallBestOut, file=paste(filename, ".tsv", sep=""), quote=FALSE, sep='\t', col.names = NA)
 
 ###############
-#Identifying PseudoReplicates
+#Identifying PseudoReplicates (This section still needs further implementation so will be commented out)
 
 #To check for the phylogenetics problem of pseudoreplication we can generate another smaller distance matrix 
 #with our selected pairings only
@@ -637,48 +584,48 @@ dfMatchOverallLineage2$inGroupPairing <- 1:nrow(dfMatchOverallLineage2)
 
 #To do this we can subset our original pairwise distance matrix with the pairing indices of each lineage only
 #We will call this new dataframe dfDistancePair
-dfDistancePair <- dfGeneticDistance[dfMatchOverallLineage1$indexNo.x,dfMatchOverallLineage2$indexNo.x]
-
-#For each column and row of this matrix, if a distance value is lower than the pairwise distances of each 
-#pairing than we know there is another bin which is actually closer
-#We check for this by using our pairwise distances from the dfMatchOverallLineages dataframes
-#First we check if another bin is closer for each row of the distance pair matrix
-closerBinRow <- foreach(j=1:nrow(dfDistancePair)) %do% which(dfDistancePair[dfMatchOverallLineage1$indexNo.x,dfMatchOverallLineage2$indexNo.x[j]]<dfMatchOverallLineage1$inGroupDist[j])
-#The next few steps will then name each identified pseudoreplicate with its respective index numbers and add these to a new dataframe
-names(closerBinRow) <- (dfMatchOverallLineage1$indexNo.x)
-closerBinRow <- unlist(closerBinRow)
-dfDistancePairR <- dfDistancePair[closerBinRow]
-distancePairR <- colnames(dfDistancePairR)
-dfDistancePairR <- data.frame(index1 = c(as.numeric(distancePairR)), index2 = c(as.numeric(names(closerBinRow))))
-dfDistancePairR <- round(dfDistancePairR)
-
-#Then we check if another bin is closer for each column of the distance pair matrix, same process is performed
-closerBinColumn <- foreach(j=1:nrow(dfDistancePair)) %do% which(dfDistancePair[dfMatchOverallLineage1$indexNo.x[j],dfMatchOverallLineage2$indexNo.x]<dfMatchOverallLineage1$inGroupDist[j])
-names(closerBinColumn) <- (dfMatchOverallLineage2$indexNo.x)
-closerBinColumn <- unlist(closerBinColumn)
-dfDistancePairC <- dfDistancePair[closerBinColumn]
-distancePairC <- colnames(dfDistancePairC)
-dfDistancePairC <- data.frame(index1 = c(as.numeric(distancePairC)), index2 = c(as.numeric(names(closerBinColumn))))
-dfDistancePairC <- round(dfDistancePairC)
-
-#Defining another dataframe with our totals for both columns and rows, deleting indexes that might 
-#be duplicated and appear multiple times
-dfDistancePairTotal <- rbind(dfDistancePairC,dfDistancePairR)
-#Making sure all indexes are integers, was getting an issue where some indexes werent displaying 
-#properly (displaying with decimals ex: 698.1 or 698.2, so getting rid of the decimal with substr)
-dfDistancePairTotal$index1 <- substr(dfDistancePairTotal$index1, 1, 3)
-dfDistancePairTotal$index2 <- substr(dfDistancePairTotal$index2, 1, 3)
-dfDistancePairTotal <- by(dfDistancePairTotal, dfDistancePairTotal["index1"], head, n=1)
-dfDistancePairTotal <- Reduce(rbind, dfDistancePairTotal)
-dfDistancePairTotal <- by(dfDistancePairTotal, dfDistancePairTotal["index2"], head, n=1)
-dfDistancePairTotal <- Reduce(rbind, dfDistancePairTotal)
-
-#Finally identifing the bins to be averaged based on their outgroup distances, these will 
-#end up in the distancePairTotal dataframe in the inGroupPairing columns
-pairAverage1 <-  subset(dfMatchOverallBest, dfMatchOverallBest$indexNo.x %in% dfDistancePairTotal$index1)
-pairAverage2 <-  subset(dfMatchOverallBest, dfMatchOverallBest$indexNo.x %in% dfDistancePairTotal$index2)
-dfDistancePairTotal$bin_uri <- pairAverage1$bin_uri.x
-dfDistancePairTotal$bin_uri2 <- pairAverage2$bin_uri.x
+# dfDistancePair <- dfGeneticDistance[dfMatchOverallLineage1$indexNo.x,dfMatchOverallLineage2$indexNo.x]
+# 
+# #For each column and row of this matrix, if a distance value is lower than the pairwise distances of each 
+# #pairing than we know there is another bin which is actually closer
+# #We check for this by using our pairwise distances from the dfMatchOverallLineages dataframes
+# #First we check if another bin is closer for each row of the distance pair matrix
+# closerBinRow <- foreach(j=1:nrow(dfDistancePair)) %do% which(dfDistancePair[dfMatchOverallLineage1$indexNo.x,dfMatchOverallLineage2$indexNo.x[j]]<dfMatchOverallLineage1$inGroupDist[j])
+# #The next few steps will then name each identified pseudoreplicate with its respective index numbers and add these to a new dataframe
+# names(closerBinRow) <- (dfMatchOverallLineage1$indexNo.x)
+# closerBinRow <- unlist(closerBinRow)
+# dfDistancePairR <- dfDistancePair[closerBinRow]
+# distancePairR <- colnames(dfDistancePairR)
+# dfDistancePairR <- data.frame(index1 = c(as.numeric(distancePairR)), index2 = c(as.numeric(names(closerBinRow))))
+# dfDistancePairR <- round(dfDistancePairR)
+# 
+# #Then we check if another bin is closer for each column of the distance pair matrix, same process is performed
+# closerBinColumn <- foreach(j=1:nrow(dfDistancePair)) %do% which(dfDistancePair[dfMatchOverallLineage1$indexNo.x[j],dfMatchOverallLineage2$indexNo.x]<dfMatchOverallLineage1$inGroupDist[j])
+# names(closerBinColumn) <- (dfMatchOverallLineage2$indexNo.x)
+# closerBinColumn <- unlist(closerBinColumn)
+# dfDistancePairC <- dfDistancePair[closerBinColumn]
+# distancePairC <- colnames(dfDistancePairC)
+# dfDistancePairC <- data.frame(index1 = c(as.numeric(distancePairC)), index2 = c(as.numeric(names(closerBinColumn))))
+# dfDistancePairC <- round(dfDistancePairC)
+# 
+# #Defining another dataframe with our totals for both columns and rows, deleting indexes that might 
+# #be duplicated and appear multiple times
+# dfDistancePairTotal <- rbind(dfDistancePairC,dfDistancePairR)
+# #Making sure all indexes are integers, was getting an issue where some indexes werent displaying 
+# #properly (displaying with decimals ex: 698.1 or 698.2, so getting rid of the decimal with substr)
+# dfDistancePairTotal$index1 <- substr(dfDistancePairTotal$index1, 1, 3)
+# dfDistancePairTotal$index2 <- substr(dfDistancePairTotal$index2, 1, 3)
+# dfDistancePairTotal <- by(dfDistancePairTotal, dfDistancePairTotal["index1"], head, n=1)
+# dfDistancePairTotal <- Reduce(rbind, dfDistancePairTotal)
+# dfDistancePairTotal <- by(dfDistancePairTotal, dfDistancePairTotal["index2"], head, n=1)
+# dfDistancePairTotal <- Reduce(rbind, dfDistancePairTotal)
+# 
+# #Finally identifing the bins to be averaged based on their outgroup distances, these will 
+# #end up in the distancePairTotal dataframe in the inGroupPairing columns
+# pairAverage1 <-  subset(dfMatchOverallBest, dfMatchOverallBest$indexNo.x %in% dfDistancePairTotal$index1)
+# pairAverage2 <-  subset(dfMatchOverallBest, dfMatchOverallBest$indexNo.x %in% dfDistancePairTotal$index2)
+# dfDistancePairTotal$bin_uri <- pairAverage1$bin_uri.x
+# dfDistancePairTotal$bin_uri2 <- pairAverage2$bin_uri.x
 
 ################
 #Statistical Analysis of Pairings
@@ -787,9 +734,8 @@ dfRelativeDist$variable <- factor(dfRelativeDist$variable, levels = dfRelativeDi
 
 #Our plot of signed relative distance per pairing using ggplot
 suppressWarnings(print(ggplot(dfRelativeDist, aes(x = variable, y = value, fill = sign)) + geom_bar(stat="identity") + 
-  scale_fill_manual(values = c("positive" = "blue", "negative" = "red")) + ggtitle("Relative Outgroup Distances of Each Latitude Separated Pairing for Sphingidae") +
-  labs(x="Pairing Number",y="Relative Distance")))
+                        scale_fill_manual(values = c("positive" = "blue", "negative" = "red")) + ggtitle("Relative Outgroup Distances of Each Latitude Separated Pairing for Sphingidae") +
+                         labs(x="Pairing Number",y="Relative Distance")))
 
 #If Error in .Call.graphics(C_palette2, .Call(C_palette2, NULL)) : invalid graphics state, use this command:
 #dev.off()
-
