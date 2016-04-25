@@ -25,7 +25,7 @@ geneticDistanceModel <- c(
   "paralin" = "paralin"
 )
 
-shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
+shinyUI(navbarPage("TeMPuЯa", theme = "bootstrap.css", id="nav", position = c("fixed-top"),
   # needed to keep fixed-top navbar from obscuring content
   header = tags$style(type = "text/css", "body {padding-top: 70px;}"),
   collapsible = "true",
@@ -52,8 +52,9 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
       mainPanel(
         leafletOutput("worldmap"),
         br(),
-        div(style='height:600px; width:850px; overflow:scroll',
-            DT::dataTableOutput("url", width = 850)),
+        div(DT::dataTableOutput("url", width = 1000)),
+        #div(style='height:600px; width:950px; overflow:scroll',
+        #    DT::dataTableOutput("url", width = 850)),
         br(),
         plotOutput("distPlot")
       )
@@ -91,14 +92,64 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
         substitution due to geographical distances for indicators in the environment or
         disease transmitters."),
       h1("Scope"),
-      p("The scope of this project is to design and construct an analytical software tool for
-        Dr. Sarah Adamowicz in the Centre for Biodiversity Genomics at the University
-        of Guelph. This tool will accept the species and criteria from the user, obtain
-        the required information from the Barcode of Life Data Systems (BOLD), screen
-        the species according to the quality of the sequence of the genetic marker, GPS
-        coordinates and the genetic distance, and output both the pairs of sister lineages
-        and outgroup sequences in CSV format suitable for follow-on analysis in the
-        software PAML. All of the data are properties of BOLD and the University of Guelph.")
+      h2("Description of the Data"),
+      p("The data for the Project consists of species information (genetic sequence, 
+location of capture, etc.), which are currently stored within the Barcode of Life 
+Database (BOLD). Historical data is also found within BOLD. To be processed, the 
+data files need to be formatted as: .tsv format."),
+      h2("Description of Target Users"),
+      p("It is expected that the user, who will primarily be processing the data, 
+will be a researcher within the field of biodiversity.  The user will not necessarily 
+need to have experience with R, but knowledge in manipulating R scripts would be helpful."),
+      br(),
+      p("To manage the TeMPuЯa system, a researcher familiar with R will need to 
+        be available occasionally for general maintenance and post-modification of 
+        the system as needs arise."),
+      h2("Description of the Proposed Method for Data Processing"),
+      p("The proposed process flow for the TeMPuЯa project is as follows:"),
+      tags$ul(
+        tags$li("User logs onto a computer having access to the internet"),
+        tags$li("User chooses the taxonomic group at which to conduct the search"),
+        tags$li("The user will need to specify a latitudinal difference. 
+                This will tell the program how far or how near to search"),
+        tags$li("The user will then specify a genetic similarity threshold.
+                This will tell the program to include or exclude pairs of 
+                species based on how similar they are according to a 
+                predetermined genetic barcode"),
+        tags$li("The program will then display all species pairs 
+                that fit according to the user-designated specifications on a world map"),
+        tags$li("The program will also output relevant information in a .csv file"),
+        tags$li("The program will perform relevant statistical tests on pairings"),
+        tags$li("The program will plot the pairings as a function of relative outgroup distance")
+      ),
+      h2("Description of the R Script"),
+      p("The R script will consist of 1 file that performs the following functions:"),
+      tags$ul(
+        tags$li("The file will scrape BOLD for the user designated species and taxonomic level"),
+        tags$li("The file will download a .tsv file containing the relevant species 
+                data and parse it"),
+        tags$li("The file will generate sister pairs of related species and organize 
+                them in multiple matrices within R"),
+        tags$li("The file will perform analysis on the sister pairs based on the 
+                user-specified latitude difference and genetic similarity threshold"),
+        tags$li("The file will then perform further statistical tests on the generated pairings")
+      ),
+      p("The R script itself does not generate a user interface. To facilitate this function, 
+        the R script will be hosted as a web application on Shiny."),
+      h2("Description of User Interface"),
+      p("Graphical user interface (GUI) for R script:"),
+      tags$ul(
+        tags$li("Taxonomic search: tells the script where to look within BOLD and 
+                begin downloading the file"),
+        tags$li("Latitudinal difference: slider bar (left side = low latitudinal difference, 
+                right side = high latitudinal difference)"),
+        tags$li("Genetic similarity threshold: slider bar (left side = low genetic similarity, 
+                right side = high genetic similarity)"),
+        tags$li("Pairs of species that fit the user's specifications displayed on a world 
+                map (colour coded)"),
+        tags$li("Table of the results is shown below the world map that can be downloaded"),
+        tags$li("Plots for the statistical tests are shown as well")
+      )
     ),
     tabPanel("About Us",
       h1("Team"),
@@ -107,12 +158,17 @@ shinyUI(navbarPage("TeMPuЯa", id="nav", position = c("fixed-top"),
         Bioinformatics Graduate Certificate Program at Seneca College in 2015-2016 to learn 
         and develop our programming skills in Perl, Java, and R. We are fast learners, and 
         work well in a team with excellent communication skills."),
-      h3("Special Thanks"),
-      p("We would like to thank Keshav Dial and Bilal Athar during the initial stages of this 
-        project. We would also like to thank our PI, Dr. Sarah Adamowicz, for giving us this
-        opportunity to collaborate between schools during the school year. Finally, we would
-        like to thank Dan Fieldhouse, Program Coordinator of the Bioinformatics 
-        Graduate Certificate Program at Seneca College.")
+      h1("Special Thanks"),
+      p("We would like to thank:"),
+      tags$ul(
+        tags$li("Our principal investigator, Dr. Sarah Adamowicz,
+                 for giving us this opportunity to collaborate between schools 
+                 during the school year."),
+        tags$li("Keshav Dial and Bilal Athar during the initial stages of this project."),
+        tags$li("Monica Wong with help in R"),
+        tags$li("Dan Fieldhouse, Program Coordinator of the Bioinformatics Graduate Certificate 
+                 Program at Seneca College.")
+        )
     )
   )
 ))
