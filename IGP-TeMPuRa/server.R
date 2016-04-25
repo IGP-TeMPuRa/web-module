@@ -33,8 +33,14 @@ require(ggplot2)
 
 shinyServer(function(input, output, session) {
   
-  #source('tsvtoDataFrame.R', local=TRUE)
-  source('demo.R', local=TRUE)
+  #var1 <<- "http://www.boldsystems.org/index.php/API_Public/combined?taxon="
+  #var2 <<- "&geo="
+  #var3 <<- "&format=tsv"
+  #URL <<- paste0(var1, input$taxonomy, var2, input$geography, var3)
+  #dfInitial <<- read_tsv(URL)
+  
+  source('tsvtoDataFrame.R', local=TRUE)
+  #source('demo.R', local=TRUE)
   
   #Used to get the latitude and longitude points and convert them back to their original value
   points <- eventReactive(input$latitude, {
@@ -42,8 +48,6 @@ shinyServer(function(input, output, session) {
     dfMatchOverallBest$medianLon.x <<- dfMatchOverallBest$medianLon.x - 180
     cbind(dfMatchOverallBest$medianLat.x, dfMatchOverallBest$medianLon.x)
   }, ignoreNULL = FALSE)
-  
-  #content <- paste0(sep = "<br/>","<b>Porifera</b>")
   
   # Create the map
   output$worldmap <- renderLeaflet({
