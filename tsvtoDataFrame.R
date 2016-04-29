@@ -83,13 +83,13 @@
 #Packages required
 
 #We need the foreach package for several functions that require iteration over dataframe rows
-#install.packages("foreach")
+install.packages("foreach")
 library(foreach)
 #For genetic distance determination using the TN93 model, we use the ape package
-#install.packages("ape")
+install.packages("ape")
 library(ape)
 #Speeds up parsing of the tsv file with read_tsv function
-#install.packages("readr")
+install.packages("readr")
 library(readr)
 #For sequence alignments we need the biostrings (DNAStringSet function) and msa packages, 
 #run each of these commands individually, sometimes it skips the libraries
@@ -99,10 +99,10 @@ library("Biostrings")
 biocLite("msa")
 library("msa")
 #For overlapping latitude regions we need the Desctools package
-#install.packages("DescTools")
+install.packages("DescTools")
 library(DescTools)
 #Also adding data tables for table merging in the outgrouping section
-#install.packages("data.table")
+install.packages("data.table")
 library(data.table)
 #For plotting of relative outgroup distances between lineages we will also need ggplot2
 require(ggplot2)
@@ -165,7 +165,7 @@ containDash <- gregexpr( "[-]", dfInitial$nucleotides)
 #(0.01 can easily modified to add more or less stringency or this section can be commented out as well if you want to retain
 #high dash content however this may interfere with the downstream alignment)
 containDash <- foreach(i=1:nrow(dfInitial)) %do% 
-               which((containDash[[i]]/nchar(dfInitial$nucleotides[i])>0.01))
+  which((containDash[[i]]/nchar(dfInitial$nucleotides[i])>0.01))
 dashcheck <- sapply( containDash , function (x) length( x ) )
 dashcheck <- which(dashcheck>0)
 #Subset out these higher N content sequences
@@ -188,6 +188,12 @@ dfInitial <- (dfInitial[,c("record_id","bin_uri","phylum_taxID","phylum_name","c
 #latnum, lonnum, record_id, 
 #if we didnt do this, the binList would consume a huge amount of memory
 dfBinList <- (dfInitial[,c("record_id","bin_uri","latNum","lonNum","nucleotides")])
+
+#Conversion to absolute values before median latitude values are calculated on dfBinList
+foreach(i=1:nrow(dfBinList)) %do% if(dfBinList$latNum[i] < 0){dfBinList$latNum[i] <- dfBinList$latNum[i] * -1}
+
+#Lon remains untouched as it is not needed for the analysis
+
 #Create groupings by bin with each grouping representing a different bin_uri
 #Each element of this list represents a bin with subelements representing the various 
 #columns of the initial 
@@ -291,7 +297,9 @@ dnaStringSet2 <- DNAStringSet(alignmentSequencesPlusRef)
 #Run a multiple sequence alignment of all sequences including the reference
 #Using default settings of ClustalOmega of the msa package to speed up the alignment
 #This could take several minutes depending on the taxa
-#Note that currently the alignment will give a few warning messages for Sphingidae, still trying to work out the meaning of these
+#Note that currently the alignment will give a message for Sphingidae:
+#Transfer:hhalign/hhalignment-C.h:2968: profile has no leading and/or trailing residues (h=-1:t=0:#=1)
+#still trying to work out the meaning of these messages but the alignment still gives a good result
 alignment2 <- msaClustalOmega(dnaStringSet2)
 
 ##############
