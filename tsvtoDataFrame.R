@@ -10,7 +10,7 @@
 #the users choosing to a dataframe in R. The generated sister pairs and outgroups can then
 #be written to a csv or tsv and the file will appear in the current working directory of R
 #Additionally, binomial and Wilcoxon tests can be performed on the relative outgroup 
-#distances of the generated pairings and a plot of the resultant outgroup distances can be 
+#distances of the generated pairings and a plot of the resultant relative outgroup distances can be 
 #generated
 
 ##################
@@ -19,15 +19,18 @@
 #There are two options for parsing the tsv, you can either download the tsv directly from the
 #BOLD API OR you can use a tsv you have previously downloaded
 
-#Larger taxa, ex: aves can potentially take from several minutes to hours in order to process
+#Larger taxa, ex: aves can potentially take several minutes to process
 #the tsv and run the sequence alignment. 
-#This can potentially consume a lot of working memory. I wouldnt run any taxa that is very
-#large, (insecta for example) until we know what kind of memory resources it will consume.
+#This can potentially consume a lot of working memory. As a benchmark Sphingidae consumes close to 3 Gb of working
+#memory during script processing.
 
 #When testing a taxa for the first time you will have to ensure that you have a suitable 
 #reference sequence for it and ensure that it is inserted into the dfRefSeq dataframe
+#To insert a sequence to the dfRefSeq dataframe, simply add another taxa and sequence in quotations in the dataframe
+#Make sure that you keep the entire sequence in one line
+
 #Once it is inserted you will then have to modify which row of the dfRefSeq dataframe 
-#is being used further 
+#is being used further on lines 280 and 314 where this dataframe is referenced
 #ex: alignmentRef <- as.character(dfRefSeq$nucleotides[1]) would correspond to first row 
 #of dfRefSeq
 #alignmentRef <- as.character(dfRefSeq$nucleotides[2]) would correspond to the second row 
@@ -66,15 +69,12 @@
 #each one does have a column for which pairing its associated with
 #dfLatitudeDistance and dfGeneticDistance are matrices converted into dataframes that show 
 #all possible distances between bins
-#dfAllSeq is the dataframe that contains sequence data for both consensus sequences and 
-#nonconsensus (bins with one member to them) sequences
+#dfAllSeq is the dataframe that contains sequence data for all sequences from each bin that were chosen for downstream analysis
 #dfGeneticDistanceStack is dfGeneticDistance with all columns concatenated into one long 
 #column, it is used to grab index numbers for each pairing
 #dfDistancePair represents pairwise distances between lineages in the final pairings only,
 #it used to determine if pseduoreplication is present in some pairings
 #dfDistancePairTotal represents the indexes and bins of the pseudoreplicate bins
-#dfConsensus and dfNonconsensus are dataframes with the consensus and nonconcensus sequences 
-#respectively but is also similar to dfLatLon in the data it contains
 #dfRelativeDist shows the relative distances to the outgroup for each pairing
 #dfRefSeq shows vairous taxa with a suitable reference sequence that has been found for them
 
@@ -160,9 +160,10 @@ dfInitial<-dfInitial[containNucleotides,]
 #greater than 5% dashes
 #This will give the number of positions where an N is found for each sequence
 containDash <- gregexpr( "[-]", dfInitial$nucleotides)
-#We then go through each sequence and see if the number of dashes is greater than 5% of
+#We then go through each sequence and see if the number of dashes is greater than 1% of
 #total sequence length 
-#(0.05 can easily modified to add more or less stringency)
+#(0.01 can easily modified to add more or less stringency or this section can be commented out as well if you want to retain
+#high dash content however this may interfere with the downstream alignment)
 containDash <- foreach(i=1:nrow(dfInitial)) %do% 
                which((containDash[[i]]/nchar(dfInitial$nucleotides[i])>0.01))
 dashcheck <- sapply( containDash , function (x) length( x ) )
@@ -230,6 +231,7 @@ dfBinList <- merge(dfBinList, dfLatLon, by.x = "bin_uri", by.y = "bin_uri")
 #First filtering out any bins with high N content before we pick a bin
 #To avoid using sequences with high N content we can eliminate sequences with greater 
 #than 1% total N content
+#This is done because sequences with high N content were interfering with the downstream alignment
 
 #This will give the number of positions where an N is found for each sequence
 containN <- gregexpr( "[N]", dfInitial$nucleotides)
@@ -286,9 +288,10 @@ alignmentSequencesPlusRef <- append(alignmentRef, alignmentSequences)
 #the format required for the alignment
 dnaStringSet2 <- DNAStringSet(alignmentSequencesPlusRef)
 
-#Run a multiple sequence alignment of all sequences
+#Run a multiple sequence alignment of all sequences including the reference
 #Using default settings of ClustalOmega of the msa package to speed up the alignment
-#This could take several minutes to even hours in some cases depending on the taxa
+#This could take several minutes depending on the taxa
+#Note that currently the alignment will give a few warning messages for Sphingidae, still trying to work out the meaning of these
 alignment2 <- msaClustalOmega(dnaStringSet2)
 
 ##############
@@ -921,6 +924,6 @@ suppressWarnings(print(ggplot(dfRelativeDist, aes(x = variable, y = value, fill 
                                  Pairing for Sphingidae") +
                          labs(x="Pairing Number",y="Relative Distance")))
 
-#If Error in .Call.graphics(C_palette2, .Call(C_palette2, NULL)) : invalid graphics state,
+#If "Error in .Call.graphics(C_palette2, .Call(C_palette2, NULL)) : invalid graphics state" message appears,
 #use this command:
 #dev.off()
