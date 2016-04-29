@@ -676,17 +676,17 @@ dfMatchOverallBest <- dfMatchOverallBest[order(dfMatchOverallBest$inGroupPairing
 #pairings out
 #If a suitable outgroup for a pairing cannot be found, I suggest going back and 
 #adjusting the criteria for the outgroupings
-noOutGroup<-which(is.na(dfMatchOverallBest$bin_uri.y))
-if(length(noOutGroup) >0){
-  dfMatchOverallBest<-dfMatchOverallBest[-noOutGroup,]
+noOutGroup1<-which(is.na(dfMatchOverallBest$bin_uri.y))
+if(length(noOutGroup1) >0){
+  dfMatchOverallBest<-dfMatchOverallBest[-noOutGroup1,]
 }
-noOutGroup<-which(is.na(dfMatchOverallLineage1$bin_uri.y))
-if(length(noOutGroup) >0){
-  dfMatchOverallLineage1<-dfMatchOverallLineage1[-noOutGroup,]
+noOutGroup2<-which(is.na(dfMatchOverallLineage1$bin_uri.y))
+if(length(noOutGroup2) >0){
+  dfMatchOverallLineage1<-dfMatchOverallLineage1[-noOutGroup2,]
 }
-noOutGroup<-which(is.na(dfMatchOverallLineage2$bin_uri.y))
-if(length(noOutGroup) >0){
-  dfMatchOverallLineage2<-dfMatchOverallLineage2[-noOutGroup,]
+noOutGroup3<-which(is.na(dfMatchOverallLineage2$bin_uri.y))
+if(length(noOutGroup3) >0){
+  dfMatchOverallLineage2<-dfMatchOverallLineage2[-noOutGroup3,]
 }
 
 #Also renumber pairings starting from 1 again
