@@ -83,26 +83,26 @@
 #Packages required
 
 #We need the foreach package for several functions that require iteration over dataframe rows
-install.packages("foreach")
+#install.packages("foreach")
 library(foreach)
 #For genetic distance determination using the TN93 model, we use the ape package
-install.packages("ape")
+#install.packages("ape")
 library(ape)
 #Speeds up parsing of the tsv file with read_tsv function
-install.packages("readr")
+#install.packages("readr")
 library(readr)
 #For sequence alignments we need the biostrings (DNAStringSet function) and msa packages, 
 #run each of these commands individually, sometimes it skips the libraries
-source("https://bioconductor.org/biocLite.R")
-biocLite("Biostrings")
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("Biostrings")
 library("Biostrings")
-biocLite("msa")
+#biocLite("msa")
 library("msa")
 #For overlapping latitude regions we need the Desctools package
-install.packages("DescTools")
+#install.packages("DescTools")
 library(DescTools)
 #Also adding data tables for table merging in the outgrouping section
-install.packages("data.table")
+#install.packages("data.table")
 library(data.table)
 #For plotting of relative outgroup distances between lineages we will also need ggplot2
 require(ggplot2)
@@ -119,8 +119,8 @@ dfInitial <- read_tsv(
 
 #If you want to run pre downloaded BOLD TSV's to avoid downloading of the same tsv multiple times, 
 #this will let you choose a path to that TSV and parse
-#tsvParseDoc <- file.choose()
-#dfInitial <- read_tsv(tsvParseDoc)
+tsvParseDoc <- file.choose()
+dfInitial <- read_tsv(tsvParseDoc)
 
 ##############
 #Dataframe Filtering and Reorganization
@@ -317,7 +317,7 @@ refSeqPos <- alignment2@unmasked[refSeqPos]
 refSeqPosStart <- regexpr("[ACTG]", refSeqPos)
 refSeqPosStart <- as.numeric(refSeqPosStart)
 
-#Finding last nucleotide position of the reference sequence, the regex may need to 
+#Finding last nucleotide position of the reference sequence, the substr and regex functions may need to 
 #be changed depending on the reference sequence
 #I use the last 20 bp taken from the reference to identify where the sequence ends 
 #in the alignment
@@ -489,27 +489,27 @@ dfMatchOverallLineage2 <- dfMatchOverallLineage2[order(dfMatchOverallLineage2$in
 #we can define the overlap range threshold as 25% of the latitude range of L1
 #If an overlap is greater than this value we would discard with this pairing
 #Of course this value could be easily modified to add more or less stringency to the script
-rangeThreshold <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% 
-  ((dfMatchOverallLineage1$latMax[l] - dfMatchOverallLineage1$latMin[l]) * 0.25) 
+rangeThreshold <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+  ((dfMatchOverallLineage1$latMax[i] - dfMatchOverallLineage1$latMin[i]) * 0.25) 
 
 #Define our latitude ranges for each lineage of a pairing
-rangeL1 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% 
-  range(dfMatchOverallLineage1$latMax[l], dfMatchOverallLineage1$latMin[l])
-rangeL2 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% 
-  range(dfMatchOverallLineage2$latMax[l], dfMatchOverallLineage2$latMin[l])
+rangeL1 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+  range(dfMatchOverallLineage1$latMax[i], dfMatchOverallLineage1$latMin[i])
+rangeL2 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+  range(dfMatchOverallLineage2$latMax[i], dfMatchOverallLineage2$latMin[i])
 
 #Then we can determine the overlap region between them using the Overlap function from 
 #the Desctools package
 #Overlap will return an absolute value so we dont have to worry about negatives for 
 #overlap values
-overlapValue <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% Overlap(rangeL1[[l]], 
-                                                                       rangeL2[[l]])
+overlapValue <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% Overlap(rangeL1[[i]], 
+                                                                       rangeL2[[i]])
 
 #Then if there is a range overlap between two lineages in a pairing, we can determine
 #if this overlap is actually larger than the 25% value of rangeThreshold for each 
 #individual pairing
-rangeOverlapCheck <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% 
-  which(rangeThreshold[[l]]<overlapValue[[l]])
+rangeOverlapCheck <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+  which(rangeThreshold[[i]]<overlapValue[[i]])
 
 #Then overlaps values exceeding that 25% value we set should be returned as an 
 #integer of 1, if an overlap does not exceed this value, then it will return a value of 0
@@ -554,11 +554,11 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,2],
 outGroupCandidatesL1a <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
   which(dfBestOutGroupL1$ind == dfMatchOverallLineage1$indexNo[i])
 #Determining indices with correct outgroup distance, setting a small range between
-#minimum outgroup distance and +0.1 distance to narrow results, range could be 
+#minimum outgroup distance and +0.05 distance to narrow results, range could be 
 #modified if outgroups cannot be found
 outGroupCandidatesL1b <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
   which(dfBestOutGroupL1$values >= dfMatchOverallLineage1$inGroupDistx1.3[i] & 
-          dfBestOutGroupL1$values < dfMatchOverallLineage1$inGroupDistx1.3[i]+0.15)
+          dfBestOutGroupL1$values < dfMatchOverallLineage1$inGroupDistx1.3[i]+0.05)
 #Intersection of the two using mapply to find the correct outgroupings for each pairing
 outGroupCandidatesL1c <- mapply(intersect,outGroupCandidatesL1a,outGroupCandidatesL1b)
 #Unlist to make into one vector 
@@ -579,7 +579,7 @@ outGroupCandidatesL2a <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do%
   which(dfBestOutGroupL2$ind == dfMatchOverallLineage2$indexNo[i])
 outGroupCandidatesL2b <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do%
   which(dfBestOutGroupL2$values >= dfMatchOverallLineage2$inGroupDistx1.3[i] & 
-          dfBestOutGroupL2$values < dfMatchOverallLineage2$inGroupDistx1.3[i]+0.15)
+          dfBestOutGroupL2$values < dfMatchOverallLineage2$inGroupDistx1.3[i]+0.05)
 outGroupCandidatesL2c <- mapply(intersect,outGroupCandidatesL2a,outGroupCandidatesL2b)
 outGroupCandidatesL2c <- unlist(outGroupCandidatesL2c)
 dfBestOutGroupL2$rownum<-seq.int(nrow(dfBestOutGroupL2))
@@ -605,8 +605,8 @@ dfBestOutGroupL2 <- dfBestOutGroupL2[order(dfBestOutGroupL2$rownum),]
 
 #this will give the correct index value for the rownum column, doing this for 
 #both L1 and L2
-j=0:(nrow(dfBestOutGroupL1)-1)
-dfBestOutGroupL1$indexNo <- (dfBestOutGroupL1$rownum / (nrow(dfAllSeq))-j) * 
+i=0:(nrow(dfBestOutGroupL1)-1)
+dfBestOutGroupL1$indexNo <- (dfBestOutGroupL1$rownum / (nrow(dfAllSeq))-i) * 
   (nrow(dfAllSeq))
 #for merging, need to change ind column in dfAllSeq to numeric first
 indNum <- with(dfAllSeq, as.numeric(as.character(ind)))
@@ -624,8 +624,8 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,3],
                                                  dfMatchOverallLineage1[,26])),]
 
 #Lineage2
-j=0:(nrow(dfBestOutGroupL2)-1)
-dfBestOutGroupL2$indexNo <- (dfBestOutGroupL2$rownum / (nrow(dfAllSeq))-j) * 
+i=0:(nrow(dfBestOutGroupL2)-1)
+dfBestOutGroupL2$indexNo <- (dfBestOutGroupL2$rownum / (nrow(dfAllSeq))-i) * 
   (nrow(dfAllSeq))
 dfBestOutGroupL2 <- data.table(dfBestOutGroupL2)
 setkey(dfBestOutGroupL2,indexNo)
@@ -749,9 +749,9 @@ dfMatchOverallLineage2$inGroupPairing <- 1:nrow(dfMatchOverallLineage2)
 # #We check for this by using our pairwise distances from the dfMatchOverallLineages
 #dataframes
 # #First we check if another bin is closer for each row of the distance pair matrix
-# closerBinRow <- foreach(j=1:nrow(dfDistancePair)) %do% 
+# closerBinRow <- foreach(i=1:nrow(dfDistancePair)) %do% 
 #which(dfDistancePair[dfMatchOverallLineage1$indexNo.x,
-#dfMatchOverallLineage2$indexNo.x[j]]<dfMatchOverallLineage1$inGroupDist[j])
+#dfMatchOverallLineage2$indexNo.x[i]]<dfMatchOverallLineage1$inGroupDist[i])
 
 # #The next few steps will then name each identified pseudoreplicate with its 
 #respective index numbers and add these to a new dataframe
@@ -765,9 +765,9 @@ dfMatchOverallLineage2$inGroupPairing <- 1:nrow(dfMatchOverallLineage2)
 # 
 # #Then we check if another bin is closer for each column of the distance pair
 #matrix, same process is performed
-# closerBinColumn <- foreach(j=1:nrow(dfDistancePair)) %do%
-#which(dfDistancePair[dfMatchOverallLineage1$indexNo.x[j],
-#dfMatchOverallLineage2$indexNo.x]<dfMatchOverallLineage1$inGroupDist[j])
+# closerBinColumn <- foreach(i=1:nrow(dfDistancePair)) %do%
+#which(dfDistancePair[dfMatchOverallLineage1$indexNo.x[i],
+#dfMatchOverallLineage2$indexNo.x]<dfMatchOverallLineage1$inGroupDist[i])
 # names(closerBinColumn) <- (dfMatchOverallLineage2$indexNo.x)
 # closerBinColumn <- unlist(closerBinColumn)
 # dfDistancePairC <- dfDistancePair[closerBinColumn]
@@ -838,12 +838,12 @@ for (i in seq(from=1, to=length(testOutGroupDist), by = 2)){
 }
 
 #Checking to see which latitudes are lower for lineage 1 compared to lineage2
-lowerLatL1 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% 
-  which(dfMatchOverallLineage1$medianLat.x[l]<dfMatchOverallLineage2$medianLat.x[l]) 
+lowerLatL1 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+  which(dfMatchOverallLineage1$medianLat.x[i]<dfMatchOverallLineage2$medianLat.x[i]) 
 #Checking to see which genetic distances are greater for lineage 1 compared to 
 #lineage2
-greaterDistanceL1 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% 
-  which(dfMatchOverallLineage1$outGroupDist[l]>dfMatchOverallLineage2$outGroupDist[l])
+greaterDistanceL1 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+  which(dfMatchOverallLineage1$outGroupDist[i]>dfMatchOverallLineage2$outGroupDist[i])
 #Then an integer of 1 will be assigned to those in Lineage1 that meet those 
 #criteria, meeting these criteria is defined as a success
 successValL1 <- mapply(intersect,lowerLatL1,greaterDistanceL1)
@@ -851,10 +851,10 @@ successValL1 <- mapply(intersect,lowerLatL1,greaterDistanceL1)
 successValL1 <- which(successValL1>0) 
 
 #Do the same process for lineage 2 compared to lineage1
-lowerLatL2 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do%
-  which(dfMatchOverallLineage2$medianLat.x[l]<dfMatchOverallLineage1$medianLat.x[l]) 
-greaterDistanceL2 <- foreach(l=1:nrow(dfMatchOverallLineage1)) %do% 
-  which(dfMatchOverallLineage2$outGroupDist[l]>dfMatchOverallLineage1$outGroupDist[l])
+lowerLatL2 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do%
+  which(dfMatchOverallLineage2$medianLat.x[i]<dfMatchOverallLineage1$medianLat.x[i]) 
+greaterDistanceL2 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+  which(dfMatchOverallLineage2$outGroupDist[i]>dfMatchOverallLineage1$outGroupDist[i])
 successValL2 <- mapply(intersect,lowerLatL2,greaterDistanceL2)
 successValL2 <- which(successValL2>0) 
 
@@ -928,8 +928,7 @@ suppressWarnings(print(ggplot(dfRelativeDist, aes(x = variable, y = value, fill 
                        + geom_bar(stat="identity") + 
                          scale_fill_manual(values = c("positive" = "blue",
                                                       "negative" = "red"))
-                       + ggtitle("Relative Outgroup Distances of Each Latitude Separated
-                                 Pairing for Sphingidae") +
+                       + ggtitle("Relative Outgroup Distances of Each Latitude Separated Pairing for Sphingidae") +
                          labs(x="Pairing Number",y="Relative Distance")))
 
 #If "Error in .Call.graphics(C_palette2, .Call(C_palette2, NULL)) : invalid graphics state" message appears,
