@@ -171,7 +171,7 @@ containDashandN <- gregexpr( "[-N]", dfInitial$nucleotides)
 #(0.01 can easily modified to add more or less stringency or this section can be commented out 
 #as well if you want to retain high dash and N content however this may interfere with the downstream alignment)
 containDashandN <- foreach(i=1:nrow(dfInitial)) %do% 
-  which((containDashandN[[i]]/nchar(dfInitial$nucleotides[i])>0))
+  which((containDashandN[[i]]/nchar(dfInitial$nucleotides[i])>0.01))
 dashNcheck <- sapply( containDashandN , function (x) length( x ) )
 dashNcheck <- which(dashNcheck>0)
 #Subset out these higher gap and N content sequences
