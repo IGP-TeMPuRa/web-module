@@ -769,6 +769,8 @@ dfPseudoRepC <- round(dfPseudoRepC)
 
 #Defining our totals for both columns and rows in the dataframe dfPseudoRep
 dfPseudoRep <- rbind(dfPseudoRepC,dfPseudoRepR)
+
+if(nrow(dfPseudoRep)>0){
 #Making sure all indexes are integers, was getting an issue where some 
 #indexes werent displaying 
 #properly (displaying with decimals ex: 698.1 or 698.2, so getting rid of
@@ -792,6 +794,7 @@ dfPseudoRep <- Reduce(rbind, dfPseudoRep)
 
 #These identified pseudoreplicates will now have their signed 
 #relative outgroup distances averaged in the statistics section
+}
 
 ################
 #Statistical Analysis of Pairings
@@ -882,7 +885,7 @@ colnames(dfRelativeDist)[1] <- "value"
 #Creating another value called sign to determine which is positive and which is negative
 dfRelativeDist[["sign"]] = ifelse(dfRelativeDist[["value"]] >= 0, 
                                   "positive", "negative")
-
+if(nrow(dfPseudoRep)>0){
 #Now we can take our pseudoreplicates and average these distances together
 #before using in the binomial and wilcoxon tests
 #First we have to add the signed relative outgroup distances to dfPseudoRep, merging dfRelativeDist
@@ -932,6 +935,7 @@ dfRelativeDist <- dfRelativeDist[setdiff(dfRelativeDist$variable, pseudoRepPairi
 dfRelativeDist <- rbind(dfRelativeDist,dfPseudoRepAverage)
 #Removing any duplicate averages
 dfRelativeDist <- dfRelativeDist[!duplicated(dfRelativeDist$value), ]
+}
 
 #Binomial test on relative branch lengths for sister pairs
 #Number of successes defined as number of positive values in the dfRelativeDist dataframe:
