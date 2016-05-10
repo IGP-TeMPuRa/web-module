@@ -390,13 +390,8 @@ refSeqPos <- alignment2@unmasked[refSeqPos]
 refSeqPosStart <- regexpr("[ACTG]", refSeqPos)
 refSeqPosStart <- as.numeric(refSeqPosStart)
 
-#Finding last nucleotide position of the reference sequence, the substr and regex functions may need to 
-#be changed depending on the reference sequence
-#I use the last 20 bp taken from the reference to identify where the sequence ends 
-#in the alignment
-last20bp <- substr(dfRefSeq$nucleotides[1], (nchar(dfRefSeq$nucleotides[1])-20), 
-                   nchar(dfRefSeq$nucleotides[1]))
-refSeqPosEnd <- regexpr(last20bp, refSeqPos)
+#Finding last nucleotide position of the reference sequence
+refSeqPosEnd <- nchar(dfRefSeq$nucleotides[1]) + refSeqPosStart
 refSeqPosEnd <- as.numeric(refSeqPosEnd)
 
 #Then we can substr the alignment by these positions to effectively trim the alignment
