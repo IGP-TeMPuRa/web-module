@@ -72,10 +72,12 @@
 #dfAllSeq is the dataframe that contains sequence data for all sequences from each bin that were chosen for downstream analysis
 #dfGeneticDistanceStack is dfGeneticDistance with all columns concatenated into one long 
 #column, it is used to grab index numbers for each pairing
+#dfDistancePair represents pairwise distances between lineages in the final pairings only,
+#it used to determine if pseduoreplication is present in some pairings
+#dfDistancePairTotal represents the indexes and bins of the pseudoreplicate bins
 #dfRelativeDist shows the relative distances to the outgroup for each pairing including pseudoreplicates
 #dfRefSeq shows vairous taxa with a suitable reference sequence that has been found for them
-#dfPseudoRepAverages shows the averaged distances for each set of pseudoreplicates, there may be some
-#duplicates but this will be eliminated in dfRelativeDist
+#dfPseudoRepAverages shows the averaged distances for each set of pseudoreplicates
 
 #Important Variables
 #binomialTestOutGroup shows the results of the binomial test
@@ -213,7 +215,7 @@ binList <- lapply(unique(dfBinList$bin_uri), function(x) dfBinList[dfBinList$bin
 medianLat <- sapply( binList , function(x) median( x$latNum ) )
 
 #We also need a median longitude for each if we are going to plot on a map for a visual interface
-medianLon <- sapply( binList , function(x) median( x$lonNum ) )
+#medianLon <- sapply( binList , function(x) median( x$lonNum ) )
 
 #we can also take a few other important pieces of data regarding each bin using sapply 
 #including number of record_ids to a bin and latitudinal min and max of each bin
@@ -224,18 +226,12 @@ binSize <- sapply( binList , function (x) length( x$record_id ) )
 #Dataframe of our median lat values, this will be used in our final dataframe
 dfLatLon <- data.frame(medianLat)
 
-#Adding bin_uri, median longitude, latMin, latMax and binSize to dataframe with medianLat
+#Adding bin_uri, latMin, latMax and binSize to dataframe with medianLat
 dfLatLon$bin_uri <- c(unique(dfInitial$bin_uri))
-dfLatLon$medianLon <- c(medianLon)
+#dfLatLon$medianLon <- c(medianLon)
 dfLatLon$latMin <- c(latMin)
 dfLatLon$latMax <- c(latMax)
 dfLatLon$binSize <- c(binSize)
-
-#Can also convert to 180 degree latitude scale, and longitude too
-dfLatLon$medianLat <- dfLatLon$medianLat + 90
-dfLatLon$latMax <- dfLatLon$latMax + 90
-dfLatLon$latMin <- dfLatLon$latMin + 90
-dfLatLon$medianLon <- dfLatLon$medianLon + 180
 
 #Merging LatLon to BinList for the sequence alignment step
 dfBinList <- merge(dfBinList, dfLatLon, by.x = "bin_uri", by.y = "bin_uri")
@@ -419,9 +415,9 @@ dfMatchOverall <- (dfMatchOverall[,c("inGroupPairing","record_id","bin_uri","val
                                      "class_name","order_taxID","order_name","family_taxID",
                                      "family_name","subfamily_taxID","subfamily_name",
                                      "genus_taxID","genus_name","species_taxID","species_name",
-                                     "nucleotides","medianLon","ind")])
+                                     "nucleotides","ind")])
 colnames(dfMatchOverall)[4] <- "inGroupDist"
-colnames(dfMatchOverall)[26] <- "indexNo"
+colnames(dfMatchOverall)[25] <- "indexNo"
 
 ##############
 #Taking the Best Possible Pairings (no bin duplicated in any pairing) and Creating Dataframes 
@@ -461,7 +457,7 @@ dfMatchOverallLineage2 <- (dfMatchOverallLineage2[,c("inGroupPairing","record_id
                                                      "family_taxID","family_name","subfamily_taxID",
                                                      "subfamily_name","genus_taxID","genus_name",
                                                      "species_taxID","species_name","nucleotides",
-                                                     "medianLon","indexNo")])
+                                                     "indexNo")])
 
 ##############
 #Eliminating Pairings based on Overlapping Latitudinal Range
@@ -478,8 +474,12 @@ dfMatchOverallLineage2 <- dfMatchOverallLineage2[order(dfMatchOverallLineage2$in
 #we can define the overlap range threshold as 25% of the latitude range of L1
 #If an overlap is greater than this value we would discard with this pairing
 #Of course this value could be easily modified to add more or less stringency to the script
-rangeThreshold <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+rangeThresholdL1 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
   ((dfMatchOverallLineage1$latMax[i] - dfMatchOverallLineage1$latMin[i]) * 0.25) 
+
+#Same process for L2
+rangeThresholdL2 <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% 
+  ((dfMatchOverallLineage2$latMax[i] - dfMatchOverallLineage2$latMin[i]) * 0.25) 
 
 #Define our latitude ranges for each lineage of a pairing
 rangeL1 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
@@ -497,8 +497,12 @@ overlapValue <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% Overlap(rangeL1[[
 #Then if there is a range overlap between two lineages in a pairing, we can determine
 #if this overlap is actually larger than the 25% value of rangeThreshold for each 
 #individual pairing
-rangeOverlapCheck <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
-  which(rangeThreshold[[i]]<overlapValue[[i]])
+rangeOverlapCheckL1 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
+  which(rangeThresholdL1[[i]]<overlapValue[[i]])
+
+#same process for L2
+rangeOverlapCheckL2 <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% 
+  which(rangeThresholdL2[[i]]<overlapValue[[i]])
 
 #Then overlaps values exceeding that 25% value we set should be returned as an 
 #integer of 1, if an overlap does not exceed this value, then it will return a value of 0
@@ -507,19 +511,29 @@ rangeOverlapCheck <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do%
 #for reference)
 #This will name each element of rangeOverlapCheck with the inGroupPairing number to 
 #identify the pairing we need to eliminate
-names(rangeOverlapCheck) <- paste0(dfMatchOverallLineage1$inGroupPairing)
-#Identify which pairing in rangeOverlapCheck is greater than 0
-overlapInd <- which(rangeOverlapCheck>0)
-#if overlapInd is not empty:
-if(length(overlapInd)>0){
+names(rangeOverlapCheckL1) <- paste0(dfMatchOverallLineage1$inGroupPairing)
+names(rangeOverlapCheckL2) <- paste0(dfMatchOverallLineage2$inGroupPairing)
+#Identify which pairing in rangeOverlapCheck is greater than 0, do this with respect to both lineages
+overlapIndL1 <- which(rangeOverlapCheckL1>0)
+overlapIndL2 <- which(rangeOverlapCheckL2>0)
+#if overlapIndL1 is not empty:
+if(length(overlapIndL1)>0){
   #Eliminate based on that pairing number(s) for MatchOverallLineage1
-  dfMatchOverallLineage1 <- dfMatchOverallLineage1[-overlapInd,]
+  dfMatchOverallLineage1 <- dfMatchOverallLineage1[-overlapIndL1,]
   #Now subset to both dfMatchOverallBest and dfMatchOverallLineage2
   dfMatchOverallBest <- subset(dfMatchOverallBest, dfMatchOverallBest$inGroupPairing 
                                %in% dfMatchOverallLineage1$inGroupPairing)
   dfMatchOverallLineage2 <- subset(dfMatchOverallLineage2, dfMatchOverallLineage2$inGroupPairing
                                    %in% dfMatchOverallLineage1$inGroupPairing)
 }
+if(length(overlapIndL2)>0){
+  dfMatchOverallLineage2 <- dfMatchOverallLineage2[-overlapIndL2,]
+  dfMatchOverallBest <- subset(dfMatchOverallBest, dfMatchOverallBest$inGroupPairing 
+                               %in% dfMatchOverallLineage2$inGroupPairing)
+  dfMatchOverallLineage1 <- subset(dfMatchOverallLineage1, dfMatchOverallLineage1$inGroupPairing
+                                   %in% dfMatchOverallLineage2$inGroupPairing)
+}
+
 ################
 #Outgroup determination for each Pairing
 
@@ -536,17 +550,14 @@ dfBestOutGroupL1 <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %i
                              dfMatchOverallLineage1$indexNo)
 #We also order by Lineage1
 dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,2],
-                                                 dfMatchOverallLineage1[,26])),]
+                                                 dfMatchOverallLineage1[,25])),]
 
 #Then we can find which indices match lineage1 with bestoutgroup l1
 outGroupCandidatesL1a <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
   which(dfBestOutGroupL1$ind == dfMatchOverallLineage1$indexNo[i])
-#Determining indices with correct outgroup distance, setting a small range between
-#minimum outgroup distance and +0.05 distance to narrow results, range could be 
-#modified if outgroups cannot be found
+#Determining indices with correct outgroup distance
 outGroupCandidatesL1b <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
-  which(dfBestOutGroupL1$values >= dfMatchOverallLineage1$inGroupDistx1.3[i] & 
-          dfBestOutGroupL1$values < dfMatchOverallLineage1$inGroupDistx1.3[i]+0.05)
+  which(dfBestOutGroupL1$values >= dfMatchOverallLineage1$inGroupDistx1.3[i])
 #Intersection of the two using mapply to find the correct outgroupings for each pairing
 outGroupCandidatesL1c <- mapply(intersect,outGroupCandidatesL1a,outGroupCandidatesL1b)
 #Unlist to make into one vector 
@@ -562,34 +573,32 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$rownum %in%
 dfBestOutGroupL2 <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %in%
                              dfMatchOverallLineage2$indexNo)
 dfBestOutGroupL2 <- dfBestOutGroupL2[order(match(dfBestOutGroupL2[,2],
-                                                 dfMatchOverallLineage2[,26])),]
+                                                 dfMatchOverallLineage2[,25])),]
 outGroupCandidatesL2a <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% 
   which(dfBestOutGroupL2$ind == dfMatchOverallLineage2$indexNo[i])
 outGroupCandidatesL2b <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do%
-  which(dfBestOutGroupL2$values >= dfMatchOverallLineage2$inGroupDistx1.3[i] & 
-          dfBestOutGroupL2$values < dfMatchOverallLineage2$inGroupDistx1.3[i]+0.05)
+  which(dfBestOutGroupL2$values >= dfMatchOverallLineage2$inGroupDistx1.3[i])
 outGroupCandidatesL2c <- mapply(intersect,outGroupCandidatesL2a,outGroupCandidatesL2b)
 outGroupCandidatesL2c <- unlist(outGroupCandidatesL2c)
 dfBestOutGroupL2$rownum<-seq.int(nrow(dfBestOutGroupL2))
 dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% 
                                        outGroupCandidatesL2c, ]
 
-#Now we find the intersection between outGroupListL1 and outGroupListL2, this will
-#determine which outgroup
-#candidates are shared between both lineages
+#this next command will determine which outgroup candidates are shared between both lineages
 dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$rownum %in% dfBestOutGroupL2$rownum, ]
 dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% dfBestOutGroupL1$rownum, ]
 
-#Taking the first entry of each index
-dfBestOutGroupL1 <- by(dfBestOutGroupL1, dfBestOutGroupL1["ind"], head, n=1)
-dfBestOutGroupL1 <- Reduce(rbind, dfBestOutGroupL1)
-#Making sure that dfBestOutGroupOverall is ordered by rownum, this will be important
-#for the next step
-dfBestOutGroupL1 <- dfBestOutGroupL1[order(dfBestOutGroupL1$rownum),] 
-#Lineage2
-dfBestOutGroupL2 <- by(dfBestOutGroupL2, dfBestOutGroupL2["ind"], head, n=1)
-dfBestOutGroupL2 <- Reduce(rbind, dfBestOutGroupL2)
-dfBestOutGroupL2 <- dfBestOutGroupL2[order(dfBestOutGroupL2$rownum),] 
+#Then we can determine averages between outgroup distances and find the outgroup with the min average distance 
+#to ensure the outgroup is still relatively close in distance to each lineage but at least at the 1.3x divergence value determined
+#for each pairing
+dfBestOutGroupL1$distAverage <- dfBestOutGroupL1$values + dfBestOutGroupL2$values / 2
+dfBestOutGroupL2$distAverage <- dfBestOutGroupL1$values + dfBestOutGroupL2$values / 2
+bestOutGroupList <- lapply(unique(dfBestOutGroupL1$ind), function(x) dfBestOutGroupL1[dfBestOutGroupL1$ind == x,])
+minOutGroupAverage <- sapply( bestOutGroupList , function(x) min( x$distAverage ) )
+
+#Subsetting each outgroup dataframe by our min outgroup averages
+dfBestOutGroupL1 <- subset(dfBestOutGroupL1, distAverage %in% minOutGroupAverage)
+dfBestOutGroupL2 <- subset(dfBestOutGroupL2, distAverage %in% minOutGroupAverage)
 
 #this will give the correct index value for the rownum column, doing this for 
 #both L1 and L2
@@ -631,7 +640,7 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[,c("bin_uri","record_id","values","medianLa
                                         "order_taxID","order_name","family_taxID",
                                         "family_name","subfamily_taxID","subfamily_name",
                                         "genus_taxID","genus_name","species_taxID",
-                                        "species_name","nucleotides","medianLon",
+                                        "species_name","nucleotides",
                                         "indexNo","ind")]
 colnames(dfBestOutGroupL1)[3] <- "outGroupDist"
 dfBestOutGroupL2 <- dfBestOutGroupL2[,c("bin_uri","record_id","values","medianLat",
@@ -640,7 +649,7 @@ dfBestOutGroupL2 <- dfBestOutGroupL2[,c("bin_uri","record_id","values","medianLa
                                         "order_taxID","order_name","family_taxID",
                                         "family_name","subfamily_taxID","subfamily_name",
                                         "genus_taxID","genus_name","species_taxID",
-                                        "species_name","nucleotides","medianLon",
+                                        "species_name","nucleotides",
                                         "indexNo","ind")]
 colnames(dfBestOutGroupL2)[3] <- "outGroupDist"
 
@@ -728,7 +737,7 @@ dfMatchOverallLineage2$inGroupPairing <- 1:nrow(dfMatchOverallLineage2)
 #indices of each lineage only
 #We will call this new dataframe dfPseudoRep
 dfPseudoRep <- dfGeneticDistance[dfMatchOverallLineage1$indexNo.x,
-                                 dfMatchOverallLineage2$indexNo.x]
+  dfMatchOverallLineage2$indexNo.x]
 
 #For each column and row of this matrix, if a distance value is lower than the
 #pairwise distances of each pairing than we know there is another bin which is actually closer
@@ -737,7 +746,7 @@ dfPseudoRep <- dfGeneticDistance[dfMatchOverallLineage1$indexNo.x,
 #First we check if another bin is closer for each row of the pseudorep dataframe
 closerBinRow <- foreach(i=1:nrow(dfPseudoRep)) %do% 
   which(dfPseudoRep[dfMatchOverallLineage1$indexNo.x,
-                    dfMatchOverallLineage2$indexNo.x[i]]<dfMatchOverallLineage1$inGroupDist[i])
+  dfMatchOverallLineage2$indexNo.x[i]]<dfMatchOverallLineage1$inGroupDist[i])
 
 #The next few steps will then name each identified pseudoreplicate with its 
 #respective index numbers and add these to a new dataframe
@@ -746,50 +755,50 @@ closerBinRow <- unlist(closerBinRow)
 dfPseudoRepR <- dfPseudoRep[closerBinRow]
 pseudoRepR <- colnames(dfPseudoRepR)
 dfPseudoRepR <- data.frame(index1 = c(as.numeric(pseudoRepR)), 
-                           index2 = c(as.numeric(names(closerBinRow))))
+  index2 = c(as.numeric(names(closerBinRow))))
 dfPseudoRepR <- round(dfPseudoRepR)
 
 #Then we check if another bin is closer for each column of the pseudorep dataframe, 
 #the same process is performed
 closerBinColumn <- foreach(i=1:nrow(dfPseudoRep)) %do%
   which(dfPseudoRep[dfMatchOverallLineage1$indexNo.x[i],
-                    dfMatchOverallLineage2$indexNo.x]<dfMatchOverallLineage1$inGroupDist[i])
+  dfMatchOverallLineage2$indexNo.x]<dfMatchOverallLineage1$inGroupDist[i])
 names(closerBinColumn) <- (dfMatchOverallLineage2$indexNo.x)
 closerBinColumn <- unlist(closerBinColumn)
 dfPseudoRepC <- dfPseudoRep[closerBinColumn]
 pseudoRepC <- colnames(dfPseudoRepC)
 dfPseudoRepC <- data.frame(index1 = c(as.numeric(pseudoRepC)), 
-                           index2 = c(as.numeric(names(closerBinColumn))))
+  index2 = c(as.numeric(names(closerBinColumn))))
 dfPseudoRepC <- round(dfPseudoRepC)
 
 #Defining our totals for both columns and rows in the dataframe dfPseudoRep
 dfPseudoRep <- rbind(dfPseudoRepC,dfPseudoRepR)
 
 if(nrow(dfPseudoRep)>0){
-#Making sure all indexes are integers, was getting an issue where some 
-#indexes werent displaying 
-#properly (displaying with decimals ex: 698.1 or 698.2, so getting rid of
-#the decimal with substr)
-dfPseudoRep$index1 <- substr(dfPseudoRep$index1, 1, 3)
-dfPseudoRep$index2 <- substr(dfPseudoRep$index2, 1, 3)
-#removing the other two dataframes since we dont need these anymore
-rm(dfPseudoRepC) 
-rm(dfPseudoRepR)
-#Identifying the pairing number for each index and adding to the dfPseudoRep dataframe
-dfPseudoRep <- merge(dfPseudoRep, dfMatchOverallBest, by.x = "index1", by.y = "indexNo.x")
-dfPseudoRep <- merge(dfPseudoRep, dfMatchOverallBest, by.x = "index2", by.y = "indexNo.x")
-dfPseudoRep <- (dfPseudoRep[,c("inGroupPairing.x","inGroupPairing.y")])
-colnames(dfPseudoRep)[1] <- "inGroupPairing"
-colnames(dfPseudoRep)[2] <- "pseudoReplicatePairing"
-#to remove duplicated pseudoreplicates across the inGroupPairing and pseudoReplictaePairing columns:
-dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["pseudoReplicatePairing"], head, n=1)
-dfPseudoRep <- Reduce(rbind, dfPseudoRep)
-dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["inGroupPairing"], head, n=1)
-dfPseudoRep <- Reduce(rbind, dfPseudoRep)
+  #Making sure all indexes are integers, was getting an issue where some 
+  #indexes werent displaying 
+  #properly (displaying with decimals ex: 698.1 or 698.2, so getting rid of
+  #the decimal with substr)
+  dfPseudoRep$index1 <- substr(dfPseudoRep$index1, 1, 3)
+  dfPseudoRep$index2 <- substr(dfPseudoRep$index2, 1, 3)
+  #removing the other two dataframes since we dont need these anymore
+  rm(dfPseudoRepC) 
+  rm(dfPseudoRepR)
+  #Identifying the pairing number for each index and adding to the dfPseudoRep dataframe
+  dfPseudoRep <- merge(dfPseudoRep, dfMatchOverallBest, by.x = "index1", by.y = "indexNo.x")
+  dfPseudoRep <- merge(dfPseudoRep, dfMatchOverallBest, by.x = "index2", by.y = "indexNo.x")
+  dfPseudoRep <- (dfPseudoRep[,c("inGroupPairing.x","inGroupPairing.y")])
+  colnames(dfPseudoRep)[1] <- "inGroupPairing"
+  colnames(dfPseudoRep)[2] <- "pseudoReplicatePairing"
+  #to remove duplicated pseudoreplicates across the inGroupPairing and pseudoReplictaePairing columns:
+  dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["pseudoReplicatePairing"], head, n=1)
+  dfPseudoRep <- Reduce(rbind, dfPseudoRep)
+  dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["inGroupPairing"], head, n=1)
+  dfPseudoRep <- Reduce(rbind, dfPseudoRep)
+}
 
 #These identified pseudoreplicates will now have their signed 
 #relative outgroup distances averaged in the statistics section
-}
 
 ################
 #Statistical Analysis of Pairings
@@ -880,56 +889,58 @@ colnames(dfRelativeDist)[1] <- "value"
 #Creating another value called sign to determine which is positive and which is negative
 dfRelativeDist[["sign"]] = ifelse(dfRelativeDist[["value"]] >= 0, 
                                   "positive", "negative")
+
 if(nrow(dfPseudoRep)>0){
-#Now we can take our pseudoreplicates and average these distances together
-#before using in the binomial and wilcoxon tests
-#First we have to add the signed relative outgroup distances to dfPseudoRep, merging dfRelativeDist
-#to do this
-dfPseudoRep <- merge(dfPseudoRep, dfRelativeDist, by.x = "inGroupPairing", by.y = "variable")
-dfPseudoRep <- merge(dfPseudoRep, dfRelativeDist, by.x = "pseudoReplicatePairing", by.y = "variable")
-dfPseudoRep <- (dfPseudoRep[,c("inGroupPairing","value.x","pseudoReplicatePairing","value.y")])
-colnames(dfPseudoRep)[2] <- "relativeDist1"
-colnames(dfPseudoRep)[4] <- "relativeDist2"
-#Also ordering dfPseudoRep
-dfPseudoRep <- dfPseudoRep[order(dfPseudoRep$inGroupPairing),]
-
-#breaking pseudoreplicates down to a list
-pseudoRepList <- lapply(unique(dfPseudoRep$inGroupPairing), 
-                        function(x) dfPseudoRep[dfPseudoRep$inGroupPairing == x,])
-
-#Number of pseudoreplicates per pairing
-pseudoRepLength <- sapply( pseudoRepList , function (x) length( x$relativeDist2 ) )
-#distances associated with pseudoreplicates only
-pseudoRepRelativeDist2 <- sapply( pseudoRepList , function (x) ( x$relativeDist2 ) )
-#distances associated with ingrouppairings only
-pseudoRepRelativeDist1 <- unique(dfPseudoRep$relativeDist1)
-
-#Now we can finally average the relative distances based on the values defined above
-pseudoRepAverages <- NULL
-for (i in seq(from=1, to=length(pseudoRepRelativeDist2), by = 1)){
-  pseudoRepAverages[i] <- (pseudoRepRelativeDist1[i] + pseudoRepRelativeDist2[i])/(pseudoRepLength[i] + 1)
-}
-
-#Now lets make another dataframe with the averages for the pseudoreplicates called dfPseudoRepAverage
-dfPseudoRepAverage <- data.frame(pseudoRepAverages)
-
-#Adding another column for the pairings associated with each average
-dfPseudoRepAverage$variable <- paste(dfPseudoRep$inGroupPairing, dfPseudoRep$pseudoReplicatePairing, sep=", ")
-
-colnames(dfPseudoRepAverage)[1] <- "value"
-#Also adding the signs of each average for plotting later on
-dfPseudoRepAverage[["sign"]] = ifelse(dfPseudoRepAverage[["value"]] >= 0, 
-                                      "positive", "negative")
-#Now lets subset dfRelativeDist to remove pairings that were averaged
-#First making a vector with all pairings averaged
-pseudoRepPairings <- append(dfPseudoRep$inGroupPairing, dfPseudoRep$pseudoReplicatePairing)
-pseudoRepPairings <- pseudoRepPairings[!duplicated(pseudoRepPairings)]
-#Then subsetting dfRelativeDist based on this
-dfRelativeDist <- dfRelativeDist[setdiff(dfRelativeDist$variable, pseudoRepPairings),]  
-#Now dfPseudoRepAverage will be appended to the relativeDist dataframe
-dfRelativeDist <- rbind(dfRelativeDist,dfPseudoRepAverage)
-#Removing any duplicate averages
-dfRelativeDist <- dfRelativeDist[!duplicated(dfRelativeDist$value), ]
+  #Now we can take our pseudoreplicates and average these distances together
+  #before using in the binomial and wilcoxon tests
+  #First we have to add the signed relative outgroup distances to dfPseudoRep, merging dfRelativeDist
+  #to do this
+  dfPseudoRep <- merge(dfPseudoRep, dfRelativeDist, by.x = "inGroupPairing", by.y = "variable")
+  dfPseudoRep <- merge(dfPseudoRep, dfRelativeDist, by.x = "pseudoReplicatePairing", by.y = "variable")
+  dfPseudoRep <- (dfPseudoRep[,c("inGroupPairing","value.x","pseudoReplicatePairing","value.y")])
+  colnames(dfPseudoRep)[2] <- "relativeDist1"
+  colnames(dfPseudoRep)[4] <- "relativeDist2"
+  #Also ordering dfPseudoRep
+  dfPseudoRep <- dfPseudoRep[order(dfPseudoRep$inGroupPairing),]
+  
+  #breaking pseudoreplicates down to a list
+  pseudoRepList <- lapply(unique(dfPseudoRep$inGroupPairing), 
+                      function(x) dfPseudoRep[dfPseudoRep$inGroupPairing == x,])
+  
+  #Number of pseudoreplicates per pairing
+  pseudoRepLength <- sapply( pseudoRepList , function (x) length( x$relativeDist2 ) )
+  #distances associated with pseudoreplicates only
+  pseudoRepRelativeDist2 <- sapply( pseudoRepList , function (x) ( x$relativeDist2 ) )
+  #distances associated with ingrouppairings only
+  pseudoRepRelativeDist1 <- unique(dfPseudoRep$relativeDist1)
+  
+  #Now we can finally average the relative distances based on the values defined above
+  pseudoRepAverages <- NULL
+  for (i in seq(from=1, to=length(pseudoRepRelativeDist2), by = 1)){
+    pseudoRepAverages[i] <- (pseudoRepRelativeDist1[i] + pseudoRepRelativeDist2[i])/(pseudoRepLength[i] + 1)
+  }
+  
+  #Now lets make another dataframe with the averages for the pseudoreplicates called dfPseudoRepAverage
+  dfPseudoRepAverage <- data.frame(pseudoRepAverages)
+  
+  #Adding another column for the pairings associated with each average
+  dfPseudoRepAverage$variable <- paste(dfPseudoRep$inGroupPairing, dfPseudoRep$pseudoReplicatePairing, sep=", ")
+  colnames(dfPseudoRepAverage)[1] <- "value"
+  #Also adding the signs of each average for plotting later on
+  dfPseudoRepAverage[["sign"]] = ifelse(dfPseudoRepAverage[["value"]] >= 0, 
+                                    "positive", "negative")
+  #Now lets subset dfRelativeDist to remove pairings that were averaged
+  #First making a vector with all pairings averaged
+  pseudoRepPairings <- append(dfPseudoRep$inGroupPairing, dfPseudoRep$pseudoReplicatePairing)
+  pseudoRepPairings <- pseudoRepPairings[!duplicated(pseudoRepPairings)]
+  #Then subsetting dfRelativeDist based on this
+  dfRelativeDist <- dfRelativeDist[setdiff(dfRelativeDist$variable, pseudoRepPairings),]  
+  #Now dfPseudoRepAverage will be appended to the relativeDist dataframe
+  dfRelativeDist <- rbind(dfRelativeDist,dfPseudoRepAverage)
+  #Removing any duplicate averages
+  #This is because sometimes you will get duplicates of pseudoreplicates, ex: 1,2 and 2,1 which would have the same average
+  dfRelativeDist <- dfRelativeDist[!duplicated(dfRelativeDist$value), ]
+  dfPseudoRepAverage <- dfPseudoRepAverage[!duplicated(dfPseudoRepAverage$value), ]
 }
 
 #Binomial test on relative branch lengths for sister pairs
@@ -969,10 +980,9 @@ suppressWarnings(print(ggplot(dfRelativeDist, aes(x = variable, y = value, fill 
                        + geom_bar(stat="identity") + 
                          scale_fill_manual(values = c("positive" = "blue",
                                                       "negative" = "red"))
-                       + theme(axis.text.x = element_text(face="bold", angle=45))
+                       + theme(axis.text.x = element_text(face="bold",angle=45))
                        + ggtitle("Relative Outgroup Distances of Each Latitude Separated Pairing") +
                          labs(x="Pairing Number",y="Relative Distance")))
-
 
 #If "Error in .Call.graphics(C_palette2, .Call(C_palette2, NULL)) : invalid graphics state" message appears,
 #use this command:
