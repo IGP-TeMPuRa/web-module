@@ -1038,7 +1038,7 @@ wilcoxTestOutgroup<-wilcox.test(dfRelativeDist$value, mu=0)
 #Will plot red if the value is below 0 (meaning not a success) and 
 #blue if above 0 (success!)
 
-#Make the variable column a factor for dfRealtiveDistOverall so ggplot orders pairings correctly
+#Make the variable column a factor for dfRealtiveDist so ggplot orders pairings correctly
 dfRelativeDist$variable <- factor(dfRelativeDist$variable, 
                                   levels = dfRelativeDist$variable)
 
