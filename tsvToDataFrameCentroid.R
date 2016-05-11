@@ -845,29 +845,29 @@ dfPseudoRepC <- round(dfPseudoRepC)
 dfPseudoRep <- rbind(dfPseudoRepC,dfPseudoRepR)
 
 if(nrow(dfPseudoRep)>0){
-#Making sure all indexes are integers, was getting an issue where some 
-#indexes werent displaying 
-#properly (displaying with decimals ex: 698.1 or 698.2, so getting rid of
-#the decimal with substr)
-dfPseudoRep$index1 <- substr(dfPseudoRep$index1, 1, 3)
-dfPseudoRep$index2 <- substr(dfPseudoRep$index2, 1, 3)
-#removing the other two dataframes since we dont need these anymore
-rm(dfPseudoRepC) 
-rm(dfPseudoRepR)
-#Identifying the pairing number for each index and adding to the dfPseudoRep dataframe
-dfPseudoRep <- merge(dfPseudoRep, dfMatchOverallBest, by.x = "index1", by.y = "indexNo.x")
-dfPseudoRep <- merge(dfPseudoRep, dfMatchOverallBest, by.x = "index2", by.y = "indexNo.x")
-dfPseudoRep <- (dfPseudoRep[,c("inGroupPairing.x","inGroupPairing.y")])
-colnames(dfPseudoRep)[1] <- "inGroupPairing"
-colnames(dfPseudoRep)[2] <- "pseudoReplicatePairing"
-#to remove duplicated pseudoreplicates across the inGroupPairing and pseudoReplictaePairing columns:
-dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["pseudoReplicatePairing"], head, n=1)
-dfPseudoRep <- Reduce(rbind, dfPseudoRep)
-dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["inGroupPairing"], head, n=1)
-dfPseudoRep <- Reduce(rbind, dfPseudoRep)
-
-#These identified pseudoreplicates will now have their signed 
-#relative outgroup distances averaged in the statistics section
+  #Making sure all indexes are integers, was getting an issue where some 
+  #indexes werent displaying 
+  #properly (displaying with decimals ex: 698.1 or 698.2, so getting rid of
+  #the decimal with substr)
+  dfPseudoRep$index1 <- substr(dfPseudoRep$index1, 1, 3)
+  dfPseudoRep$index2 <- substr(dfPseudoRep$index2, 1, 3)
+  #removing the other two dataframes since we dont need these anymore
+  rm(dfPseudoRepC) 
+  rm(dfPseudoRepR)
+  #Identifying the pairing number for each index and adding to the dfPseudoRep dataframe
+  dfPseudoRep <- merge(dfPseudoRep, dfMatchOverallBest, by.x = "index1", by.y = "indexNo.x")
+  dfPseudoRep <- merge(dfPseudoRep, dfMatchOverallBest, by.x = "index2", by.y = "indexNo.x")
+  dfPseudoRep <- (dfPseudoRep[,c("inGroupPairing.x","inGroupPairing.y")])
+  colnames(dfPseudoRep)[1] <- "inGroupPairing"
+  colnames(dfPseudoRep)[2] <- "pseudoReplicatePairing"
+  #to remove duplicated pseudoreplicates across the inGroupPairing and pseudoReplictaePairing columns:
+  dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["pseudoReplicatePairing"], head, n=1)
+  dfPseudoRep <- Reduce(rbind, dfPseudoRep)
+  dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["inGroupPairing"], head, n=1)
+  dfPseudoRep <- Reduce(rbind, dfPseudoRep)
+  
+  #These identified pseudoreplicates will now have their signed 
+  #relative outgroup distances averaged in the statistics section
 }
 
 ################
@@ -960,54 +960,54 @@ colnames(dfRelativeDist)[1] <- "value"
 dfRelativeDist[["sign"]] = ifelse(dfRelativeDist[["value"]] >= 0, 
                                   "positive", "negative")
 if(nrow(dfPseudoRep)>0){
-#Now we can take our pseudoreplicates and average these distances together
-#before using in the binomial and wilcoxon tests
-#First we have to add the signed relative outgroup distances to dfPseudoRep, merging dfRelativeDist
-#to do this
-dfPseudoRep <- merge(dfPseudoRep, dfRelativeDist, by.x = "inGroupPairing", by.y = "variable")
-dfPseudoRep <- merge(dfPseudoRep, dfRelativeDist, by.x = "pseudoReplicatePairing", by.y = "variable")
-dfPseudoRep <- (dfPseudoRep[,c("inGroupPairing","value.x","pseudoReplicatePairing","value.y")])
-colnames(dfPseudoRep)[2] <- "relativeDist1"
-colnames(dfPseudoRep)[4] <- "relativeDist2"
-#Also ordering dfPseudoRep
-dfPseudoRep <- dfPseudoRep[order(dfPseudoRep$inGroupPairing),]
-
-#breaking pseudoreplicates down to a list
-pseudoRepList <- lapply(unique(dfPseudoRep$inGroupPairing), 
-                    function(x) dfPseudoRep[dfPseudoRep$inGroupPairing == x,])
-
-#Number of pseudoreplicates per pairing
-pseudoRepLength <- sapply( pseudoRepList , function (x) length( x$relativeDist2 ) )
-#distances associated with pseudoreplicates only
-pseudoRepRelativeDist2 <- sapply( pseudoRepList , function (x) ( x$relativeDist2 ) )
-#distances associated with ingrouppairings only
-pseudoRepRelativeDist1 <- unique(dfPseudoRep$relativeDist1)
-
-#Now we can finally average the relative distances based on the values defined above
-pseudoRepAverages <- NULL
-for (i in seq(from=1, to=length(pseudoRepRelativeDist2), by = 1)){
-  pseudoRepAverages[i] <- (pseudoRepRelativeDist1[i] + pseudoRepRelativeDist2[i])/(pseudoRepLength[i] + 1)
-}
-
-#Now lets make another dataframe with the averages for the pseudoreplicates called dfPseudoRepAverage
-dfPseudoRepAverage <- data.frame(pseudoRepAverages)
-
-#Adding another column for the pairings associated with each average
-dfPseudoRepAverage$variable <- paste(dfPseudoRep$inGroupPairing, dfPseudoRep$pseudoReplicatePairing, sep=", ")
-colnames(dfPseudoRepAverage)[1] <- "value"
-#Also adding the signs of each average for plotting later on
-dfPseudoRepAverage[["sign"]] = ifelse(dfPseudoRepAverage[["value"]] >= 0, 
-                                  "positive", "negative")
-#Now lets subset dfRelativeDist to remove pairings that were averaged
-#First making a vector with all pairings averaged
-pseudoRepPairings <- append(dfPseudoRep$inGroupPairing, dfPseudoRep$pseudoReplicatePairing)
-pseudoRepPairings <- pseudoRepPairings[!duplicated(pseudoRepPairings)]
-#Then subsetting dfRelativeDist based on this
-dfRelativeDist <- dfRelativeDist[setdiff(dfRelativeDist$variable, pseudoRepPairings),]  
-#Now dfPseudoRepAverage will be appended to the relativeDist dataframe
-dfRelativeDist <- rbind(dfRelativeDist,dfPseudoRepAverage)
-#Removing any duplicate averages
-dfRelativeDist <- dfRelativeDist[!duplicated(dfRelativeDist$value), ]
+  #Now we can take our pseudoreplicates and average these distances together
+  #before using in the binomial and wilcoxon tests
+  #First we have to add the signed relative outgroup distances to dfPseudoRep, merging dfRelativeDist
+  #to do this
+  dfPseudoRep <- merge(dfPseudoRep, dfRelativeDist, by.x = "inGroupPairing", by.y = "variable")
+  dfPseudoRep <- merge(dfPseudoRep, dfRelativeDist, by.x = "pseudoReplicatePairing", by.y = "variable")
+  dfPseudoRep <- (dfPseudoRep[,c("inGroupPairing","value.x","pseudoReplicatePairing","value.y")])
+  colnames(dfPseudoRep)[2] <- "relativeDist1"
+  colnames(dfPseudoRep)[4] <- "relativeDist2"
+  #Also ordering dfPseudoRep
+  dfPseudoRep <- dfPseudoRep[order(dfPseudoRep$inGroupPairing),]
+  
+  #breaking pseudoreplicates down to a list
+  pseudoRepList <- lapply(unique(dfPseudoRep$inGroupPairing), 
+                      function(x) dfPseudoRep[dfPseudoRep$inGroupPairing == x,])
+  
+  #Number of pseudoreplicates per pairing
+  pseudoRepLength <- sapply( pseudoRepList , function (x) length( x$relativeDist2 ) )
+  #distances associated with pseudoreplicates only
+  pseudoRepRelativeDist2 <- sapply( pseudoRepList , function (x) ( x$relativeDist2 ) )
+  #distances associated with ingrouppairings only
+  pseudoRepRelativeDist1 <- unique(dfPseudoRep$relativeDist1)
+  
+  #Now we can finally average the relative distances based on the values defined above
+  pseudoRepAverages <- NULL
+  for (i in seq(from=1, to=length(pseudoRepRelativeDist2), by = 1)){
+    pseudoRepAverages[i] <- (pseudoRepRelativeDist1[i] + pseudoRepRelativeDist2[i])/(pseudoRepLength[i] + 1)
+  }
+  
+  #Now lets make another dataframe with the averages for the pseudoreplicates called dfPseudoRepAverage
+  dfPseudoRepAverage <- data.frame(pseudoRepAverages)
+  
+  #Adding another column for the pairings associated with each average
+  dfPseudoRepAverage$variable <- paste(dfPseudoRep$inGroupPairing, dfPseudoRep$pseudoReplicatePairing, sep=", ")
+  colnames(dfPseudoRepAverage)[1] <- "value"
+  #Also adding the signs of each average for plotting later on
+  dfPseudoRepAverage[["sign"]] = ifelse(dfPseudoRepAverage[["value"]] >= 0, 
+                                    "positive", "negative")
+  #Now lets subset dfRelativeDist to remove pairings that were averaged
+  #First making a vector with all pairings averaged
+  pseudoRepPairings <- append(dfPseudoRep$inGroupPairing, dfPseudoRep$pseudoReplicatePairing)
+  pseudoRepPairings <- pseudoRepPairings[!duplicated(pseudoRepPairings)]
+  #Then subsetting dfRelativeDist based on this
+  dfRelativeDist <- dfRelativeDist[setdiff(dfRelativeDist$variable, pseudoRepPairings),]  
+  #Now dfPseudoRepAverage will be appended to the relativeDist dataframe
+  dfRelativeDist <- rbind(dfRelativeDist,dfPseudoRepAverage)
+  #Removing any duplicate averages
+  dfRelativeDist <- dfRelativeDist[!duplicated(dfRelativeDist$value), ]
 }
 
 #Binomial test on relative branch lengths for sister pairs
