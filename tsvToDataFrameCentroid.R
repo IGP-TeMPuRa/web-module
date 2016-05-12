@@ -72,9 +72,6 @@
 #dfAllSeq is the dataframe that contains sequence data for all sequences from each bin that were chosen for downstream analysis
 #dfGeneticDistanceStack is dfGeneticDistance with all columns concatenated into one long 
 #column, it is used to grab index numbers for each pairing
-#dfDistancePair represents pairwise distances between lineages in the final pairings only,
-#it used to determine if pseduoreplication is present in some pairings
-#dfDistancePairTotal represents the indexes and bins of the pseudoreplicate bins
 #dfRelativeDist shows the relative distances to the outgroup for each pairing including pseudoreplicates
 #dfRefSeq shows vairous taxa with a suitable reference sequence that has been found for them
 #dfPseudoRepAverages shows the averaged distances for each set of pseudoreplicates
