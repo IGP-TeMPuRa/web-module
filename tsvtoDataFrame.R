@@ -591,8 +591,8 @@ dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% dfBestOutGroup
 #Then we can determine averages between outgroup distances and find the outgroup with the min average distance 
 #to ensure the outgroup is still relatively close in distance to each lineage but at least at the 1.3x divergence value determined
 #for each pairing
-dfBestOutGroupL1$distAverage <- dfBestOutGroupL1$values + dfBestOutGroupL2$values / 2
-dfBestOutGroupL2$distAverage <- dfBestOutGroupL1$values + dfBestOutGroupL2$values / 2
+dfBestOutGroupL1$distAverage <- (dfBestOutGroupL1$values + dfBestOutGroupL2$values) / 2
+dfBestOutGroupL2$distAverage <- (dfBestOutGroupL1$values + dfBestOutGroupL2$values) / 2
 bestOutGroupList <- lapply(unique(dfBestOutGroupL1$ind), function(x) dfBestOutGroupL1[dfBestOutGroupL1$ind == x,])
 minOutGroupAverage <- sapply( bestOutGroupList , function(x) min( x$distAverage ) )
 
