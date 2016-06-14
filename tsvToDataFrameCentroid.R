@@ -115,6 +115,7 @@ require(ggplot2)
 
 #First we download the TSV and convert it into a dataframe, this URL is what is modified 
 #by the user and will determine the taxa, geographic region, etc.
+
 dfInitial <- read_tsv(
   "http://www.boldsystems.org/index.php/API_Public/combined?taxon=Sphingidae&geo=all&format=tsv")
 
@@ -188,7 +189,6 @@ dfInitial <- (dfInitial[,c("record_id","bin_uri","phylum_taxID","phylum_name","c
                            "family_name","subfamily_taxID","subfamily_name","genus_taxID",
                            "genus_name","species_taxID","species_name","nucleotides",
                            "latNum","lonNum")])
-
 ############
 #Bin Stats and Median Latitude/Longitude Determination per bin
 
@@ -668,8 +668,8 @@ dfBestOutGroupL2 <- dfBestOutGroupL2[dfBestOutGroupL2$rownum %in% dfBestOutGroup
 #Then we can determine averages between outgroup distances and find the outgroup with the min average distance 
 #to ensure the outgroup is still relatively close in distance to each lineage but at least at the 1.3x divergence value determined
 #for each pairing
-dfBestOutGroupL1$distAverage <- dfBestOutGroupL1$values + dfBestOutGroupL2$values / 2
-dfBestOutGroupL2$distAverage <- dfBestOutGroupL1$values + dfBestOutGroupL2$values / 2
+dfBestOutGroupL1$distAverage <- (dfBestOutGroupL1$values + dfBestOutGroupL2$values) / 2
+dfBestOutGroupL2$distAverage <- (dfBestOutGroupL1$values + dfBestOutGroupL2$values) / 2
 bestOutGroupList <- lapply(unique(dfBestOutGroupL1$ind), function(x) dfBestOutGroupL1[dfBestOutGroupL1$ind == x,])
 minOutGroupAverage <- sapply( bestOutGroupList , function(x) min( x$distAverage ) )
 
@@ -695,7 +695,7 @@ dfBestOutGroupL1 <- merge(dfBestOutGroupL1, dfAllSeq, by.x = "indexNo",
 #Converting back to dataframe for further use
 dfBestOutGroupL1 <- as.data.frame(dfBestOutGroupL1)
 dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,3],
-                                                 dfMatchOverallLineage1[,26])),]
+                                                 dfMatchOverallLineage1[,25])),]
 
 #Lineage2
 i=0:(nrow(dfBestOutGroupL2)-1)
@@ -707,7 +707,7 @@ dfBestOutGroupL2 <- merge(dfBestOutGroupL2, dfAllSeq, by.x = "indexNo",
                           by.y = "ind", all.x = TRUE)
 dfBestOutGroupL2 <- as.data.frame(dfBestOutGroupL2)
 dfBestOutGroupL2 <- dfBestOutGroupL2[order(match(dfBestOutGroupL2[,3],
-                                                 dfMatchOverallLineage2[,26])),]
+                                                 dfMatchOverallLineage2[,25])),]
 
 #Can rename certain columns to more closely resemble dfMatchOverallLineage dataframes 
 #(except the outGroupDist column which would be unique to each lineage of course)
@@ -851,6 +851,7 @@ dfPseudoRepC <- round(dfPseudoRepC)
 #Defining our totals for both columns and rows in the dataframe dfPseudoRep
 dfPseudoRep <- rbind(dfPseudoRepC,dfPseudoRepR)
 
+#If there is at least 1 pseudoreplicate found
 if(nrow(dfPseudoRep)>0){
   #Making sure all indexes are integers, was getting an issue where some 
   #indexes werent displaying 
@@ -887,7 +888,6 @@ if(nrow(dfPseudoRep)>0){
 #Null expectation being that pairings with high lat/high outgroup dist are equally 
 #prevalent compared with low lat/high outgroup dist pairings
 
-#Refer to line 212 for the dataframe containing distances(outgroupDist)
 #create variables that hold outgroup distances
 testOutGroupDist<-as.numeric(dfMatchOverallBest$outGroupDist) #stored as a vector
 #set trueTestOutGroupDist to null to ensure empty variable
@@ -966,7 +966,7 @@ colnames(dfRelativeDist)[1] <- "value"
 #Creating another value called sign to determine which is positive and which is negative
 dfRelativeDist[["sign"]] = ifelse(dfRelativeDist[["value"]] >= 0, 
                                   "positive", "negative")
-
+#Again if at least 1 pseudoreplicate is present in the dfPseudoRep dataframe
 if(nrow(dfPseudoRep)>0){
   #Now we can take our pseudoreplicates and average these distances together
   #before using in the binomial and wilcoxon tests
