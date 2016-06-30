@@ -998,7 +998,8 @@ if(nrow(dfPseudoRep)>0){
   pseudoRepRelativeDist1Names <- sapply( pseudoRepList , function (x) ( x$inGroupPairing ) )
   pseudoRepRelativeDist1Names <- sapply( pseudoRepRelativeDist1Names , function (x) unique( x ) )
   #append these distances together for averaging using mapply
-  pseudoRepAllRelativeDist = mapply(c, pseudoRepRelativeDist2Names, pseudoRepRelativeDist1Names)
+  pseudoRepAllRelativeDist = mapply(c, pseudoRepRelativeDist1, pseudoRepRelativeDist2)
+  pseudoRepAllRelativeDistNames = mapply(c, pseudoRepRelativeDist2Names, pseudoRepRelativeDist1Names)
   
   #Now we can finally average the relative distances based on the values in the pseudoRepAllRelativeDist list
   pseudoRepAverage <- sapply( pseudoRepAllRelativeDist , function(x) mean( x ) )
@@ -1007,7 +1008,7 @@ if(nrow(dfPseudoRep)>0){
   dfPseudoRepAverage <- data.frame(pseudoRepAverage)
   
   #Adding another column for the pairings associated with each average
-  dfPseudoRepAverage$variable <- pseudoRepAllRelativeDist
+  dfPseudoRepAverage$variable <- pseudoRepAllRelativeDistNames
   trim <- function (x) sub("[c(]","", x)
   dfPseudoRepAverage$variable <- trim(dfPseudoRepAverage$variable)
   colnames(dfPseudoRepAverage)[1] <- "value"
