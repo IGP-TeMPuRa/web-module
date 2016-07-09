@@ -12,6 +12,7 @@
 #Additionally, binomial and Wilcoxon tests can be performed on the relative outgroup 
 #distances of the generated pairings and a plot of the resultant relative outgroup distances can be 
 #generated
+#A world map visualizing the latitude separated pairings can also be run using plotly
 
 ##################
 #A few important tips:
@@ -30,14 +31,13 @@
 #Make sure that you keep the entire sequence in one line
 
 #Once it is inserted you will then have to modify which row of the dfRefSeq dataframe 
-#is being used further on lines 280 and 314 where this dataframe is referenced
+#is being used further on lines 360 and 395 where this dataframe is referenced
 #ex: alignmentRef <- as.character(dfRefSeq$nucleotides[1]) would correspond to first row 
 #of dfRefSeq
 #alignmentRef <- as.character(dfRefSeq$nucleotides[2]) would correspond to the second row 
 #of dfRefSeq
 
-#Some tips for using the BOLD API since this is what is used to grab the relevant data we 
-#need: 
+#Some tips for using the BOLD API since this is what is used to grab the relevant data we need: 
 #To see details on how to use the bold API, 
 #go to http://www.boldsystems.org/index.php/resources/api?type=webservices
 #Can add additional restrictions to url, for example 
@@ -79,6 +79,7 @@
 #Important Variables
 #binomialTestOutGroup shows the results of the binomial test
 #wilcoxonTestOutgroup shows the results of the wilcoxon test
+#mapLayout will allow customization of the world map for map plotting
 
 
 #################
@@ -107,6 +108,9 @@ library(DescTools)
 library(data.table)
 #For plotting of relative outgroup distances between lineages we will also need ggplot2
 require(ggplot2)
+#plotly for map plotting functionality
+#install.packages("plotly")
+library(plotly)
 
 #################
 #R Commands:
@@ -213,7 +217,7 @@ binList <- lapply(unique(dfBinList$bin_uri), function(x) dfBinList[dfBinList$bin
 medianLat <- sapply( binList , function(x) median( x$latNum ) )
 
 #We also need a median longitude for each if we are going to plot on a map for a visual interface
-#medianLon <- sapply( binList , function(x) median( x$lonNum ) )
+medianLon <- sapply( binList , function(x) median( x$lonNum ) )
 
 #we can also take a few other important pieces of data regarding each bin using sapply 
 #including number of record_ids to a bin and latitudinal min and max of each bin
@@ -226,7 +230,7 @@ dfLatLon <- data.frame(medianLat)
 
 #Adding bin_uri, latMin, latMax and binSize to dataframe with medianLat
 dfLatLon$bin_uri <- c(unique(dfInitial$bin_uri))
-#dfLatLon$medianLon <- c(medianLon)
+dfLatLon$medianLon <- c(medianLon)
 dfLatLon$latMin <- c(latMin)
 dfLatLon$latMax <- c(latMax)
 dfLatLon$binSize <- c(binSize)
@@ -312,8 +316,8 @@ if(length(largeBin) >0){
   dfAllSeq <- (dfAllSeq[,c("bin_uri.x","binSize","record_id","phylum_taxID","phylum_name",
                            "class_taxID","class_name","order_taxID","order_name","family_taxID",
                            "family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name",
-                           "species_taxID","species_name","nucleotides.x","medianLat","latMin","latMax"
-                           )])
+                           "species_taxID","species_name","nucleotides.x","medianLat","latMin","latMax",
+                           "medianLon")])
   colnames(dfAllSeq)[1] <- "bin_uri"
   colnames(dfAllSeq)[18] <- "nucleotides"
   #Adding an index column to reference later with Match overall dataframe
@@ -326,7 +330,8 @@ if(length(largeBin) >0){
   dfAllSeq <- (dfAllSeq[,c("bin_uri.x","binSize","record_id","phylum_taxID","phylum_name",
                            "class_taxID","class_name","order_taxID","order_name","family_taxID",
                            "family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name",
-                           "species_taxID","species_name","nucleotides.x","medianLat","latMin","latMax"
+                           "species_taxID","species_name","nucleotides.x","medianLat","latMin","latMax",
+                           "medianLon"
                            )])
   dfAllSeq$ind <- row.names(dfAllSeq)
 }
@@ -493,7 +498,7 @@ dfMatchOverall <- (dfMatchOverall[,c("inGroupPairing","record_id","bin_uri","val
                                      "class_name","order_taxID","order_name","family_taxID",
                                      "family_name","subfamily_taxID","subfamily_name",
                                      "genus_taxID","genus_name","species_taxID","species_name",
-                                     "nucleotides","ind")])
+                                     "nucleotides","ind","medianLon")])
 colnames(dfMatchOverall)[4] <- "inGroupDist"
 colnames(dfMatchOverall)[25] <- "indexNo"
 
@@ -535,7 +540,7 @@ dfMatchOverallLineage2 <- (dfMatchOverallLineage2[,c("inGroupPairing","record_id
                                                      "family_taxID","family_name","subfamily_taxID",
                                                      "subfamily_name","genus_taxID","genus_name",
                                                      "species_taxID","species_name","nucleotides",
-                                                     "indexNo")])
+                                                     "indexNo","medianLon")])
 
 ##############
 #Eliminating Pairings based on Overlapping Latitudinal Range
@@ -720,7 +725,7 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[,c("bin_uri","record_id","values","medianLa
                                         "family_name","subfamily_taxID","subfamily_name",
                                         "genus_taxID","genus_name","species_taxID",
                                         "species_name","nucleotides",
-                                        "indexNo","ind")]
+                                        "indexNo","ind","medianLon")]
 colnames(dfBestOutGroupL1)[3] <- "outGroupDist"
 dfBestOutGroupL2 <- dfBestOutGroupL2[,c("bin_uri","record_id","values","medianLat",
                                         "latMin","latMax","binSize","phylum_taxID",
@@ -729,7 +734,7 @@ dfBestOutGroupL2 <- dfBestOutGroupL2[,c("bin_uri","record_id","values","medianLa
                                         "family_name","subfamily_taxID","subfamily_name",
                                         "genus_taxID","genus_name","species_taxID",
                                         "species_name","nucleotides",
-                                        "indexNo","ind")]
+                                        "indexNo","ind","medianLon")]
 colnames(dfBestOutGroupL2)[3] <- "outGroupDist"
 
 #adding an ingroup pairing column to each bestoutgroup dataframes
@@ -997,9 +1002,10 @@ if(nrow(dfPseudoRep)>0){
   pseudoRepRelativeDist1 <- unique(dfPseudoRep$relativeDist1)
   pseudoRepRelativeDist1Names <- sapply( pseudoRepList , function (x) ( x$inGroupPairing ) )
   pseudoRepRelativeDist1Names <- sapply( pseudoRepRelativeDist1Names , function (x) unique( x ) )
-  #append these distances together for averaging using mapply
-  pseudoRepAllRelativeDist = mapply(c, pseudoRepRelativeDist1, pseudoRepRelativeDist2)
-  pseudoRepAllRelativeDistNames = mapply(c, pseudoRepRelativeDist2Names, pseudoRepRelativeDist1Names)
+  #append these distances together for averaging using map
+  #map will append to a list format
+  pseudoRepAllRelativeDist = Map(c, pseudoRepRelativeDist1, pseudoRepRelativeDist2)
+  pseudoRepAllRelativeDistNames = Map(c, pseudoRepRelativeDist2Names, pseudoRepRelativeDist1Names)
   
   #Now we can finally average the relative distances based on the values in the pseudoRepAllRelativeDist list
   pseudoRepAverage <- sapply( pseudoRepAllRelativeDist , function(x) mean( x ) )
@@ -1045,7 +1051,7 @@ binomialTestOutGroup <- binom.test(successOverall,
 wilcoxTestOutgroup<-wilcox.test(dfRelativeDist$value, mu=0)
 
 ###############
-#Plotting of Results
+#Plotting of Relative Outgroup Distance Results
 
 #Plot of Relative Outgroup Distances
 
@@ -1069,3 +1075,82 @@ suppressWarnings(print(ggplot(dfRelativeDist, aes(x = variable, y = value, fill 
 #If "Error in .Call.graphics(C_palette2, .Call(C_palette2, NULL)) : invalid graphics state" message appears,
 #use this command:
 #dev.off()
+
+################
+#Map Plotting of latitude separated pairings using Plotly
+#Info can be found here on this: https://plot.ly/r/scatter-plots-on-maps/
+
+#Code used from Plotly website
+#note there are more options for map customization that can be found on plotly
+#this just represents a basic world map representation
+#new variable for basic map layout characteristics
+mapLayout <- list(
+              showland = TRUE,
+              showlakes = TRUE,
+              showcountries = TRUE,
+              showocean = TRUE,
+              countrywidth = 0.5,
+              landcolor = toRGB("grey90"),
+              lakecolor = toRGB("white"),
+              oceancolor = toRGB("white"),
+              lonaxis = list(
+                showgrid = TRUE,
+                gridcolor = toRGB("gray40"),
+                gridwidth = 0.5
+              ),
+              lataxis = list(
+                showgrid = TRUE,
+                gridcolor = toRGB("gray40"),
+                gridwidth = 0.5
+              )
+)
+
+#New dataframe column with data for hovering over points on the map
+#can add more columns to hover if you want more detail on the map
+dfMatchOverallBest$hover <- paste("Pairing Number:", dfMatchOverallBest$inGroupPairing, ",", 
+                                  "BIN:", dfMatchOverallBest$bin_uri.x, ",",
+                                  "Genus:", dfMatchOverallBest$genus_name.x, ",", 
+                                  "Species:", dfMatchOverallBest$species_name.x, ",", 
+                                  "Ingroup Distance:", round(dfMatchOverallBest$inGroupDist, 4), ",",
+                                  "Outgroup:", dfMatchOverallBest$bin_uri.y, ",", dfMatchOverallBest$species_name.y)
+#Have to modify latitudes to accomodate negative latitudes again
+dfMatchOverallBest$medianLat.x <- dfMatchOverallBest$medianLat.x - 90
+
+#Will show the map itself visualizing the pairings
+#you will need to click on the icon in the viewer that says "show in new window" 
+#(little box with arrow beside the refresh viewer icon), unfortunately does not show map directly in Rstudio
+#the map will appear in a web browser window though you dont have to be online to do this
+plot_ly(dfMatchOverallBest, lat = medianLat.x, lon = medianLon.x,
+        text = hover,
+        color = as.ordered(inGroupPairing), mode = "markers+lines", type = 'scattergeo') %>%
+  layout(title = 'Latitude Separated Sister Pairings', geo = mapLayout)
+
+###############
+#Posting of Map to Plotly Server for Online Viewing
+
+#For uploading to plotly server for online viewing of map
+
+#You will first have to create a plotly account to do this:
+#https://plot.ly/
+
+#Note there is a limit of one plot for the free version of the Plotly account
+#and the plot is public meaning other people on plotly can view the plot though
+#it is not easily found on the website without the direct link
+
+#to obtain additional private plots on the server you have to pay for a package
+
+#Run these commands for uploading user details, enter username and API key
+#(obtained from making an account and in settings of account details) in the empty quotations to run commands:
+
+#Sys.setenv("plotly_username"="") 
+#Sys.setenv("plotly_api_key"="")
+
+#run these commands to make plot as a variable:
+
+#plot <- plot_ly(dfMatchOverallBest, lat = medianLat.x, lon = medianLon.x,
+                #text = hover,
+                #color = as.ordered(inGroupPairing), mode = "markers+lines", type = 'scattergeo') %>%
+  #layout(title = 'Latitude Separated Sister Pairings', geo = mapLayout)
+
+#run this command for posting of map to plotly server (can rename in quotations to a name you prefer):
+#plotly_POST(plot, filename = "LatitudeSeparatedPairingsMap")
