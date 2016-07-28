@@ -120,6 +120,8 @@ library(plotly)
 #First we download the TSV and convert it into a dataframe, this URL is what is modified 
 #by the user and will determine the taxa, geographic region, etc.
 
+#Note: some taxa may have parsing failures while reading the TSV file
+
 dfInitial <- read_tsv(
   "http://www.boldsystems.org/index.php/API_Public/combined?taxon=Sphingidae&geo=all&format=tsv")
 
@@ -178,10 +180,11 @@ dashNcheck <- which(dashNcheck>0)
 #Subset out these higher gap and N content sequences
 dfInitial <- dfInitial[-dashNcheck,]
 
-#Can also filter out shorter length sequences, less than 650 bp
-#This is because shorter length sequences can also interfere with the alignment as well
+#Filter out sequences greater than median sequence length plus 50 bp or median sequence length minus 50 bp
+#This is because widely differing sequence lengths can interfere with the alignment
 sequenceLengths <- nchar(dfInitial$nucleotides)
-sequenceLengthCheck <- which(sequenceLengths<650)
+sequenceLengthMedian <- median(sequenceLengths)
+sequenceLengthCheck <- which(sequenceLengths>(sequenceLengthMedian+50) | sequenceLengths<(sequenceLengthMedian-50))
 dfInitial <- dfInitial[-sequenceLengthCheck,]
 
 #Modifying Bin column slightly to remove "BIN:"
@@ -202,8 +205,7 @@ dfInitial <- (dfInitial[,c("record_id","bin_uri","phylum_taxID","phylum_name","c
 dfBinList <- (dfInitial[,c("record_id","bin_uri","latNum","lonNum","nucleotides")])
 
 #Conversion to absolute values before median latitude values are calculated on dfBinList
-#Adding 90 will ensure all latitudes are the same sign 
-dfBinList$latNum <- dfBinList$latNum + 90
+dfBinList$latNumAbs <- abs(dfBinList$latNum) 
 
 #Lon remains untouched as it is not needed for the analysis
 
@@ -213,8 +215,11 @@ dfBinList$latNum <- dfBinList$latNum + 90
 #dataframe created and the information is grouped by bin 
 binList <- lapply(unique(dfBinList$bin_uri), function(x) dfBinList[dfBinList$bin_uri == x,])
 
-#Now to determine a median latitude for each bin
-medianLat <- sapply( binList , function(x) median( x$latNum ) )
+#Now to determine a median latitude for each bin based on absolute values
+medianLatAbs <- sapply( binList , function(x) median( x$latNumAbs ) )
+
+#median lon untouched for mapping
+medianLatMap <- sapply( binList , function(x) median( x$latNum ) )
 
 #We also need a median longitude for each if we are going to plot on a map for a visual interface
 medianLon <- sapply( binList , function(x) median( x$lonNum ) )
@@ -226,14 +231,18 @@ latMax <- sapply( binList , function(x) max( x$latNum ) )
 binSize <- sapply( binList , function (x) length( x$record_id ) )
 
 #Dataframe of our median lat values, this will be used in our final dataframe
-dfLatLon <- data.frame(medianLat)
+dfLatLon <- data.frame(medianLatAbs)
 
 #Adding bin_uri, latMin, latMax and binSize to dataframe with medianLat
 dfLatLon$bin_uri <- c(unique(dfInitial$bin_uri))
 dfLatLon$medianLon <- c(medianLon)
 dfLatLon$latMin <- c(latMin)
+#Convert to absolute value for latMin and Max
+dfLatLon$latMin <- abs(dfLatLon$latMin)
 dfLatLon$latMax <- c(latMax)
+dfLatLon$latMax <- abs(dfLatLon$latMax)
 dfLatLon$binSize <- c(binSize)
+dfLatLon$medianLatMap <- c(medianLatMap)
 
 #Merging LatLon to BinList for the sequence alignment step
 dfBinList <- merge(dfBinList, dfLatLon, by.x = "bin_uri", by.y = "bin_uri")
@@ -316,7 +325,7 @@ if(length(largeBin) >0){
   dfAllSeq <- (dfAllSeq[,c("bin_uri.x","binSize","record_id","phylum_taxID","phylum_name",
                            "class_taxID","class_name","order_taxID","order_name","family_taxID",
                            "family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name",
-                           "species_taxID","species_name","nucleotides.x","medianLat","latMin","latMax",
+                           "species_taxID","species_name","nucleotides.x","medianLatAbs","medianLatMap","latMin","latMax",
                            "medianLon")])
   colnames(dfAllSeq)[1] <- "bin_uri"
   colnames(dfAllSeq)[18] <- "nucleotides"
@@ -330,7 +339,7 @@ if(length(largeBin) >0){
   dfAllSeq <- (dfAllSeq[,c("bin_uri.x","binSize","record_id","phylum_taxID","phylum_name",
                            "class_taxID","class_name","order_taxID","order_name","family_taxID",
                            "family_name","subfamily_taxID","subfamily_name","genus_taxID","genus_name",
-                           "species_taxID","species_name","nucleotides.x","medianLat","latMin","latMax",
+                           "species_taxID","species_name","nucleotides.x","medianLatAbs","medianLatMap","latMin","latMax",
                            "medianLon"
                            )])
   dfAllSeq$ind <- row.names(dfAllSeq)
@@ -347,7 +356,7 @@ if(length(largeBin) >0){
 #Can call this dfRefSeq, for the sake of testing just using a standard length (658 bp) 
 #COI-5P sequence from Sphingidae for now
 dfRefSeq <- data.frame(taxa = c("Sphingidae"),
-                       nucleotides = c("AACATTATATTTTATTTTTGGAATTTGAGCAGGAATAGTGGGAACATCATTAAGATTACTAATTCGTGCAGAATTAGGAAATCCTGGATCTTTAATTGGAGATGATCAAATTTATAATACAATTGTCACAGCTCATGCTTTTATTATAATTTTTTTTATAGTTATACCAATTATAATTGGAGGGTTTGGAAATTGATTAGTACCATTAATACTTGGAGCACCTGATATAGCATTCCCCCGAATAAATAATATAAGATTTTGACTTTTACCCCCCTCATTAACTCTCTTAATTTCTAGAAGTATTGTAGAAAATGGAGCTGGAACAGGATGAACAGTTTACCCCCCTTTATCTTCAAATATTGCACATAGAGGTAGCTCTGTAGATTTAGCTATTTTCTCATTACATTTAGCTGGAATTTCATCAATCTTAGGAGCTATTAATTTTATTACTACAATTATTAATATACGAATTAATAATTTATCATTTGATCAAATACCTTTATTTGTTTGAGCTGTTGGAATTACAGCATTTTTATTACTTTTATCTCTTCCAGTTTTAGCAGGAGCAATTACCATACTTTTAACTGATCGAAATTTAAATACATCATTTTTTGACCCAGCAGGAGGAGGAGATCCAATTTTATATCAACATTTATTT"))
+                       nucleotides = c("GGAATTTGAGCAGGAATAGTAGGAACATCTTTAAGTCTTTTAATTCGAGCAGAATTAGGTAACCCAGGATCATTAATCGGAGATGATCAAATTTACAATACAATTGTTACAGCTCACGCATTTATTATAATTTTTTTTATAGTAATACCTATTATAATTGGAGGATTTGGAAATTGACTAATTCCTTTAATATTAGGAGCTCCTGATATAGCTTTCCCCCGAATAAATAACATAAGTTTTTGACTCTTACCCCCTTCTTTAATATTACTAATTTCTAGTAGTATTGTAGAAAATGGAGCCGGAACAGGTTGAACAGTATATCCCCCATTATCTTCTAATATTGCACATAGAGGAAGATCTGTTGATTTAGCTATTTTCTCTTTACATTTAGCAGGTATTTCATCTATTTTAGGAGCTATTAATTTTATCACTACAATTATTAATATGCGAATTAATAATATAACATTTGATCAAATACCTTTATTTGTTTGAGCTGTAGGAATTACAGCATTTTTATTATTACTATCCTTGCCTGTTTTAGCGGGAGCAATTACTATATTATTAACAGATCGAAATTTAAATACATCATTCTTTGATCCTGCAGGTGGAGGAGACCCAATTTTATACCAACATTTATTT"))
 colnames(dfRefSeq)[2] <- "nucleotides"
 dfRefSeq$nucleotides <- as.character(dfRefSeq$nucleotides)
 
@@ -448,9 +457,9 @@ dfGeneticDistanceStack <-stack(dfGeneticDistance)
 
 #Can be determined easily with the dist function which will determine latitudinal differences
 #between all bins
-distLat <- dist(dfAllSeq$medianLat)
+distLat <- dist(dfAllSeq$medianLatAbs, method = "manhattan")
 #Then we convert this to a matrix
-matrixLatitudeDistance <- as.matrix( dist(dfAllSeq$medianLat) )
+matrixLatitudeDistance <- as.matrix( dist(dfAllSeq$medianLatAbs) )
 #Then convert to dataframe since its easier to manipulate, this dataframe will be used further down 
 #(in testing I found matrices tend to be less reliable for further manipulations)
 dfLatitudeDistance <-as.data.frame(matrixLatitudeDistance)
@@ -493,14 +502,14 @@ dfMatchOverall$inGroupPairing <- rep(1:(nrow(dfMatchOverall)/2), each = 2)
 #Reorganizing and renaming some columns in MatchOverall dataframe to make more easily 
 #readable 
 dfMatchOverall <- (dfMatchOverall[,c("inGroupPairing","record_id","bin_uri","values",
-                                     "inGroupDistx1.3","medianLat","latMin","latMax",
+                                     "inGroupDistx1.3","medianLatAbs","medianLatMap","latMin","latMax",
                                      "binSize","phylum_taxID","phylum_name","class_taxID",
                                      "class_name","order_taxID","order_name","family_taxID",
                                      "family_name","subfamily_taxID","subfamily_name",
                                      "genus_taxID","genus_name","species_taxID","species_name",
                                      "nucleotides","ind","medianLon")])
 colnames(dfMatchOverall)[4] <- "inGroupDist"
-colnames(dfMatchOverall)[25] <- "indexNo"
+colnames(dfMatchOverall)[26] <- "indexNo"
 
 ##############
 #Taking the Best Possible Pairings (no bin duplicated in any pairing) and Creating Dataframes 
@@ -534,7 +543,7 @@ dfMatchOverallLineage2 <- merge(dfMatchOverallLineage2, dfMatchOverallBest, all.
 #Reorganization of columns for second lineage
 dfMatchOverallLineage2 <- (dfMatchOverallLineage2[,c("inGroupPairing","record_id",
                                                      "bin_uri","inGroupDist","inGroupDistx1.3",
-                                                     "medianLat","latMin","latMax","binSize",
+                                                     "medianLatAbs","medianLatMap","latMin","latMax","binSize",
                                                      "phylum_taxID","phylum_name","class_taxID",
                                                      "class_name","order_taxID","order_name",
                                                      "family_taxID","family_name","subfamily_taxID",
@@ -615,6 +624,18 @@ if(length(overlapIndTotal)>0){
                                    %in% dfMatchOverallLineage1$inGroupPairing)
 }
 
+#Also making sure all pairings meet the latitude difference of 20 degrees since I was getting some pairings that werent meeting this criteria
+#Still unsure as to why this is
+latitudeDiffCheck <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% abs(dfMatchOverallLineage1$medianLatAbs[i] - dfMatchOverallLineage2$medianLatAbs[i])
+latitudeDiffCheck <- which(latitudeDiffCheck<20)
+if(length(overlapIndTotal)>0){
+  dfMatchOverallLineage1 <- dfMatchOverallLineage1[-latitudeDiffCheck,]
+  #Now subset to both dfMatchOverallBest and dfMatchOverallLineage2
+  dfMatchOverallBest <- subset(dfMatchOverallBest, dfMatchOverallBest$inGroupPairing 
+                               %in% dfMatchOverallLineage1$inGroupPairing)
+  dfMatchOverallLineage2 <- subset(dfMatchOverallLineage2, dfMatchOverallLineage2$inGroupPairing
+                                   %in% dfMatchOverallLineage1$inGroupPairing)
+}
 
 ################
 #Outgroup determination for each Pairing
@@ -632,7 +653,7 @@ dfBestOutGroupL1 <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %i
                              dfMatchOverallLineage1$indexNo)
 #We also order by Lineage1
 dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,2],
-                                                 dfMatchOverallLineage1[,25])),]
+                                                 dfMatchOverallLineage1[,26])),]
 
 #Then we can find which indices match lineage1 with bestoutgroup l1
 outGroupCandidatesL1a <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
@@ -655,7 +676,7 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[dfBestOutGroupL1$rownum %in%
 dfBestOutGroupL2 <- subset(dfGeneticDistanceStack, dfGeneticDistanceStack$ind %in%
                              dfMatchOverallLineage2$indexNo)
 dfBestOutGroupL2 <- dfBestOutGroupL2[order(match(dfBestOutGroupL2[,2],
-                                                 dfMatchOverallLineage2[,25])),]
+                                                 dfMatchOverallLineage2[,26])),]
 outGroupCandidatesL2a <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do% 
   which(dfBestOutGroupL2$ind == dfMatchOverallLineage2$indexNo[i])
 outGroupCandidatesL2b <- foreach(i=1:nrow(dfMatchOverallLineage2)) %do%
@@ -702,7 +723,7 @@ dfBestOutGroupL1 <- merge(dfBestOutGroupL1, dfAllSeq, by.x = "indexNo",
 #Converting back to dataframe for further use
 dfBestOutGroupL1 <- as.data.frame(dfBestOutGroupL1)
 dfBestOutGroupL1 <- dfBestOutGroupL1[order(match(dfBestOutGroupL1[,3],
-                                                 dfMatchOverallLineage1[,25])),]
+                                                 dfMatchOverallLineage1[,26])),]
 
 #Lineage2
 i=0:(nrow(dfBestOutGroupL2)-1)
@@ -714,11 +735,11 @@ dfBestOutGroupL2 <- merge(dfBestOutGroupL2, dfAllSeq, by.x = "indexNo",
                           by.y = "ind", all.x = TRUE)
 dfBestOutGroupL2 <- as.data.frame(dfBestOutGroupL2)
 dfBestOutGroupL2 <- dfBestOutGroupL2[order(match(dfBestOutGroupL2[,3],
-                                                 dfMatchOverallLineage2[,25])),]
+                                                 dfMatchOverallLineage2[,26])),]
 
 #Can rename certain columns to more closely resemble dfMatchOverallLineage dataframes 
 #(except the outGroupDist column which would be unique to each lineage of course)
-dfBestOutGroupL1 <- dfBestOutGroupL1[,c("bin_uri","record_id","values","medianLat",
+dfBestOutGroupL1 <- dfBestOutGroupL1[,c("bin_uri","record_id","values","medianLatAbs","medianLatMap",
                                         "latMin","latMax","binSize","phylum_taxID",
                                         "phylum_name","class_taxID","class_name",
                                         "order_taxID","order_name","family_taxID",
@@ -727,7 +748,7 @@ dfBestOutGroupL1 <- dfBestOutGroupL1[,c("bin_uri","record_id","values","medianLa
                                         "species_name","nucleotides",
                                         "indexNo","ind","medianLon")]
 colnames(dfBestOutGroupL1)[3] <- "outGroupDist"
-dfBestOutGroupL2 <- dfBestOutGroupL2[,c("bin_uri","record_id","values","medianLat",
+dfBestOutGroupL2 <- dfBestOutGroupL2[,c("bin_uri","record_id","values","medianLatAbs","medianLatMap",
                                         "latMin","latMax","binSize","phylum_taxID",
                                         "phylum_name","class_taxID","class_name",
                                         "order_taxID","order_name","family_taxID",
@@ -878,9 +899,12 @@ if(nrow(dfPseudoRep)>0){
   #to remove duplicated pseudoreplicates across the inGroupPairing and pseudoReplictaePairing columns:
   #Ex: 1,2 and 2,1 in separate rows of dfPseudoRep
   dfPseudoRep <- dfPseudoRep[!duplicated(apply(dfPseudoRep,1,function(x) paste(sort(x),collapse=''))),]
-  #also removing duplicates across the pseudoReplicatePairing column
+  #removing duplicates across the pseudoReplicatePairing column
   dfPseudoRep <- by(dfPseudoRep, dfPseudoRep["pseudoReplicatePairing"], head, n=1)
   dfPseudoRep <- Reduce(rbind, dfPseudoRep)
+  #rwmoval of duplicates across columns
+  pseudoRepColRemove <- which(dfPseudoRep$inGroupPairing == dfPseudoRep$pseudoReplicatePairing)
+  dfPseudoRep <- dfPseudoRep[-pseudoRepColRemove,]
 }
 
 #These identified pseudoreplicates will now have their signed 
@@ -920,7 +944,7 @@ for (i in seq(from=1, to=length(testOutGroupDist), by = 2)){
 
 #Checking to see which latitudes are lower for lineage 1 compared to lineage2
 lowerLatL1 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
-  which(dfMatchOverallLineage1$medianLat.x[i]<dfMatchOverallLineage2$medianLat.x[i]) 
+  which(dfMatchOverallLineage1$medianLatAbs.x[i]<dfMatchOverallLineage2$medianLatAbs.x[i]) 
 #Checking to see which genetic distances are greater for lineage 1 compared to 
 #lineage2
 greaterDistanceL1 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
@@ -933,7 +957,7 @@ successValL1 <- which(successValL1>0)
 
 #Do the same process for lineage 2 compared to lineage1
 lowerLatL2 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do%
-  which(dfMatchOverallLineage2$medianLat.x[i]<dfMatchOverallLineage1$medianLat.x[i]) 
+  which(dfMatchOverallLineage2$medianLatAbs.x[i]<dfMatchOverallLineage1$medianLatAbs.x[i]) 
 greaterDistanceL2 <- foreach(i=1:nrow(dfMatchOverallLineage1)) %do% 
   which(dfMatchOverallLineage2$outGroupDist[i]>dfMatchOverallLineage1$outGroupDist[i])
 successValL2 <- mapply(intersect,lowerLatL2,greaterDistanceL2)
@@ -1083,7 +1107,10 @@ suppressWarnings(print(ggplot(dfRelativeDist, aes(x = variable, y = value, fill 
 #Code used from Plotly website
 #note there are more options for map customization that can be found on plotly
 #this just represents a basic world map representation
-#new variable for basic map layout characteristics
+
+#new variable for basic map layout characteristics:
+#several different projection types can be used for the map, for the sake of the pairings, will use the eckert 4 projection
+#that reduces area around the poles
 mapLayout <- list(
               showland = TRUE,
               showlakes = TRUE,
@@ -1093,6 +1120,7 @@ mapLayout <- list(
               landcolor = toRGB("grey90"),
               lakecolor = toRGB("white"),
               oceancolor = toRGB("white"),
+              projection = list(type = 'eckert4'),
               lonaxis = list(
                 showgrid = TRUE,
                 gridcolor = toRGB("gray40"),
@@ -1113,16 +1141,19 @@ dfMatchOverallBest$hover <- paste("Pairing Number:", dfMatchOverallBest$inGroupP
                                   "Species:", dfMatchOverallBest$species_name.x, ",", 
                                   "Ingroup Distance:", round(dfMatchOverallBest$inGroupDist, 4), ",",
                                   "Outgroup:", dfMatchOverallBest$bin_uri.y, ",", dfMatchOverallBest$species_name.y)
-#Have to modify latitudes to accomodate negative latitudes again
-dfMatchOverallBest$medianLat.x <- dfMatchOverallBest$medianLat.x - 90
 
 #Will show the map itself visualizing the pairings
 #you will need to click on the icon in the viewer that says "show in new window" 
 #(little box with arrow beside the refresh viewer icon), unfortunately does not show map directly in Rstudio
 #the map will appear in a web browser window though you dont have to be online to do this
-plot_ly(dfMatchOverallBest, lat = medianLat.x, lon = medianLon.x,
+
+#Note the color spectrum for the legend can be customized,
+#you can go here for color spectrum options: http://www.datavis.ca/sasmac/brewerpal.html
+#Just type the name of the color spectrum you want in quotations where it says colors = "" in the command below
+
+plot_ly(dfMatchOverallBest, lat = medianLatMap.x, lon = medianLon.x,
         text = hover,
-        color = as.ordered(inGroupPairing), mode = "markers+lines", type = 'scattergeo') %>%
+        color = as.ordered(inGroupPairing), colors = "Spectral", mode = "markers+lines", type = 'scattergeo') %>%
   layout(title = 'Latitude Separated Sister Pairings', geo = mapLayout)
 
 ###############
@@ -1147,10 +1178,10 @@ plot_ly(dfMatchOverallBest, lat = medianLat.x, lon = medianLon.x,
 
 #run these commands to make plot as a variable:
 
-#plot <- plot_ly(dfMatchOverallBest, lat = medianLat.x, lon = medianLon.x,
-                #text = hover,
-                #color = as.ordered(inGroupPairing), mode = "markers+lines", type = 'scattergeo') %>%
-  #layout(title = 'Latitude Separated Sister Pairings', geo = mapLayout)
+#plot <- plot_ly(dfMatchOverallBest, lat = medianLatMap.x, lon = medianLon.x,
+          #text = hover,
+          #color = as.ordered(inGroupPairing), colors = "Spectral", mode = "markers+lines", type = 'scattergeo') %>%
+          #layout(title = 'Latitude Separated Sister Pairings', geo = mapLayout)
 
 #run this command for posting of map to plotly server (can rename in quotations to a name you prefer):
 #plotly_POST(plot, filename = "LatitudeSeparatedPairingsMap")
